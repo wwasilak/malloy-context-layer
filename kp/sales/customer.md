@@ -1,13 +1,15 @@
 ---
-uri: "kp:Customer"
+uri: kp:Customer
 type: entity
 title: Customer
 description: "A natural or legal person who buys products from the company."
 synonyms: [buyer]
 steward: Sales
-preferred_source: "base.customer_order_in_context"
+preferred_source: base.customer_order_in_context
+tags: [Sales, approved]
 status: approved
-timestamp: 2026-07-14T00:00:00Z
+approved_by: Sales
+timestamp: 2026-07-15
 ---
 
 # Customer
@@ -17,5 +19,5 @@ A natural or legal person who buys products from the company.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Not yet generated — run `npm run build`._
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

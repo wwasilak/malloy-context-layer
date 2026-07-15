@@ -1,11 +1,13 @@
 ---
-uri: "kp:LineCount"
+uri: kp:LineCount
 type: measure
 title: "Line Count"
 description: "Number of order lines in scope."
 steward: "Retail Operations"
+tags: ["Retail Operations", approved]
 status: approved
-timestamp: 2026-07-14T00:00:00Z
+approved_by: "Retail Operations"
+timestamp: 2026-07-15
 ---
 
 # Line Count
@@ -15,5 +17,5 @@ Number of order lines in scope.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Not yet generated — run `npm run build`._
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

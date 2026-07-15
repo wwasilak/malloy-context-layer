@@ -1,19 +1,24 @@
 ---
-uri: "kp:StoreOpenDate"
+uri: kp:StoreOpenDate
 type: attribute
 title: "Store Open Date"
 description: "The date on which a store opened for business."
 steward: "Retail Operations"
+of: kp:Store
+tags: ["Retail Operations", approved]
 status: approved
-timestamp: 2026-07-14T00:00:00Z
+approved_by: "Retail Operations"
+timestamp: 2026-07-15
 ---
 
 # Store Open Date
 
 The date on which a store opened for business.
 
+Attribute of [Store](store.md).
+
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Not yet generated — run `npm run build`._
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

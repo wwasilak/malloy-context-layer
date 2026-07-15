@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // =============================================================================
-// Exporter v3 — Knowledge Plane (OKF bundle) + Malloy models -> knowledge_map.json
-//                                                             + write-back into kp/
+// build.js — the ONE build command: validate Knowledge Plane (OKF) against the
+//            compiled Malloy models, then project the links back into the bundle.
 //
 //   The KP is now a directory of markdown files with YAML frontmatter (OKF).
 //   Malloy models are UNCHANGED: they still link via `# concept = "kp:..."`.
@@ -23,7 +23,6 @@ const okf = require('./okf-lib');
 
 const KP_DIR     = process.env.KP_DIR     || 'kp';
 const MODELS_DIR = process.env.MODELS_DIR || 'models';
-const OUT_FILE   = process.env.OUT_FILE   || 'knowledge_map.json';
 const WORKDIR    = process.env.WORKDIR    || process.cwd();
 
 // ---- helpers: pull tag values via the Annotations view (unchanged from v2) --
@@ -49,6 +48,7 @@ const urlReader = { readURL: async (url) => fs.readFileSync(url, 'utf8') };
 // (v2 only kept which concepts a source touches; v3 keeps (source, field) so
 //  the write-back can render real Implementations tables.)
 async function compileModel(filePath) {
+  // (filePath is returned so the coverage probe can reload the right model)
   const conn = new DuckDBConnection('duckdb', undefined, WORKDIR);
   const runtime = new malloy.SingleConnectionRuntime({ connection: conn, urlReader });
   const selfUrl = pathToFileURL(path.resolve(filePath)).href;
@@ -64,17 +64,23 @@ async function compileModel(filePath) {
     if (!definedHere(exp.location)) continue;
     const fieldConcepts = [];   // [{concept, field}]
     const joinRoles = [];
+    const views = [];           // pre-built query surfaces (turtles/views)
+    const ungoverned = [];      // fields with no # concept annotation
     for (const f of exp.allFields) {
       if (!definedHere(f.location)) continue;
-      const isJoin = f.constructor && /Explore/.test(f.constructor.name);
+      const ctor = f.constructor ? f.constructor.name : '';
+      const isJoin = /Explore/.test(ctor);
+      const isView = /Query|Turtle/.test(ctor) || (typeof f.isQueryField === 'function' && f.isQueryField());
       const fc = conceptOf(f);
       const role = roleOf(f);
       if (isJoin && role) joinRoles.push(role);
+      if (isView) views.push({ name: f.name, description: tagValue(f, 'description') });
       if (fc) fieldConcepts.push({ concept: fc, field: f.name });
+      else if (!isJoin && !isView) ungoverned.push(f.name);
     }
-    sources[exp.name] = { concept: conceptOf(exp), fieldConcepts, joinRoles };
+    sources[exp.name] = { concept: conceptOf(exp), fieldConcepts, joinRoles, views, ungoverned };
   }
-  return { model: modelName, sources };
+  return { model: modelName, sources, filePath };
 }
 
 // ---- main --------------------------------------------------------------------
@@ -123,6 +129,21 @@ async function compileModel(filePath) {
     errors.forEach(e => console.error('  ' + e));
     process.exit(1);
   }
+  // declared `of` vs implemented host source — the cheap drift sensor
+  {
+    const srcConcept = {};
+    for (const m of models)
+      for (const [srcName, s] of Object.entries(m.sources))
+        if (s.concept) srcConcept[`${m.model}.${srcName}`] = s.concept;
+    for (const m of models)
+      for (const [srcName, s] of Object.entries(m.sources))
+        for (const fc of s.fieldConcepts) {
+          const declared = canon[fc.concept] && canon[fc.concept].of;
+          const host = srcConcept[`${m.model}.${srcName}`];
+          if (declared && host && declared !== host)
+            warnings.push(`[drift] ${fc.concept} declared of=${declared} but implemented on ${m.model}.${srcName} (${host})`);
+        }
+  }
   warnings.forEach(w => console.warn('  WARN ' + w));
   console.log('Referential validation: OK');
 
@@ -142,14 +163,71 @@ async function compileModel(filePath) {
     }
   }
 
-  // 5. emit agent map + write bookkeeping back into the bundle
-  const out = okf.emitMap(bundle, touch, usedRels, implementations);
-  fs.writeFileSync(OUT_FILE, JSON.stringify(out, null, 2) + '\n');
-  const touched = okf.writeBack(KP_DIR, bundle, implementations);
+  // 4b. views inventory — the sanctioned pre-built query surfaces
+  const viewInventory = [];
+  for (const m of models)
+    for (const [srcName, s] of Object.entries(m.sources))
+      for (const v of (s.views || []))
+        viewInventory.push({ path: `${m.model}.${srcName}.${v.name}`,
+                             ...(v.description ? { description: v.description } : {}) });
+
+  // 4c. data coverage — min/max of the temporal anchor concept (bundle.yaml:
+  // temporal_anchor: kp:OrderDate). Non-fatal: on any failure, warn and omit.
+  let coverage = null;
+  const anchor = bundle.config && bundle.config.temporal_anchor;
+  if (anchor) {
+    const impl = (implementations[anchor] || []).find(i => i.field);
+    if (!impl) {
+      console.warn(`  WARN temporal_anchor ${anchor} has no field binding — data_coverage omitted`);
+    } else {
+      try {
+        const m = models.find(x => x.model === impl.model);
+        const conn = new DuckDBConnection('duckdb', undefined, WORKDIR);
+        const runtime = new malloy.SingleConnectionRuntime({ connection: conn, urlReader });
+        const mm = runtime.loadModel(new URL(pathToFileURL(path.resolve(m.filePath)).href));
+        const q = `run: ${impl.source} -> { aggregate: min_date is min(${impl.field}), max_date is max(${impl.field}) }`;
+        const res = await mm.loadQuery(q).run({ rowLimit: 1 });
+        const row = res.data.toObject()[0];
+        const iso = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : String(v).slice(0, 10));
+        coverage = { anchor_concept: anchor, binding: `${impl.model}.${impl.source}.${impl.field}`,
+                     min_date: iso(row.min_date), max_date: iso(row.max_date),
+                     note: 'Anchor relative time windows (e.g. \'last 2 years\') to max_date, not today, and say so in the answer.' };
+        console.log(`Data coverage (${anchor}): ${coverage.min_date} .. ${coverage.max_date}`);
+      } catch (e) {
+        console.warn('  WARN data_coverage probe failed: ' + (e.message || e));
+      }
+    }
+  }
+
+  // 5. coverage checks
+  for (const [uri, c] of Object.entries(canon)) {
+    if (c.status === 'approved' && !touch[uri])
+      warnings.push(`[coverage] approved but unbuilt: ${uri} — no model implements it`);
+  }
+  for (const m of models)
+    for (const [srcName, s] of Object.entries(m.sources)) {
+      const un = (s.ungoverned || []);
+      if (un.length)
+        warnings.push(`[coverage] built but ungoverned in ${m.model}.${srcName}: ${un.join(', ')} — fields with no # concept annotation`);
+    }
+  warnings.length && console.warn(warnings.filter(w => w.startsWith('[coverage]')).map(w => '  WARN ' + w).join('\n'));
+
+  // 6. write everything back into the bundle (the bundle IS the agent context)
+  const sourceConcepts = {};
+  for (const m of models)
+    for (const [srcName, s] of Object.entries(m.sources))
+      if (s.concept) sourceConcepts[`${m.model}.${srcName}`] = s.concept;
+  const touched = okf.writeBack(KP_DIR, bundle, implementations, sourceConcepts,
+                                { views: viewInventory, coverage });
+
+  // 7. refresh the graph (best effort — needs knowledge-catalog cloned + python3)
+  try {
+    require('child_process').execSync(`python3 make_viz.py ${KP_DIR} kp_viz.html`, { stdio: 'pipe' });
+    console.log('Graph refreshed -> kp_viz.html');
+  } catch (e) { console.log('(viz skipped — clone GoogleCloudPlatform/knowledge-catalog to enable)'); }
 
   const shared = Object.keys(touch).filter(u => touch[u].size > 1);
   console.log('\nConcepts used: ' + Object.keys(touch).length + ' / ' + Object.keys(canon).length + ' canonical');
   console.log('Shared concepts (>1 model): ' + shared.length + (shared.length ? ' -> ' + shared.join(', ') : ''));
-  console.log('Write-back: ' + touched + ' concept files updated, index.md regenerated');
-  console.log('-> ' + OUT_FILE);
+  console.log('Write-back: ' + touched + ' concept files updated, routing table + indexes regenerated');
 })().catch(e => { console.error('FATAL:', e.stack || e); process.exit(1); });

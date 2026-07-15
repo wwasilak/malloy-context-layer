@@ -1,18 +1,22 @@
 ---
-uri: "kp:LineQuantity"
+uri: kp:LineQuantity
 type: attribute
 title: "Line Quantity"
 description: "Number of product units on the order line."
+of: kp:OrderLine
+tags: [core, approved]
 status: approved
-timestamp: 2026-07-14T00:00:00Z
+timestamp: 2026-07-15
 ---
 
 # Line Quantity
 
 Number of product units on the order line.
 
+Attribute of [Order Line](../sales/order-line.md).
+
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Not yet generated — run `npm run build`._
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

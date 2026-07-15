@@ -1,18 +1,22 @@
 ---
-uri: "kp:ProductCategory"
+uri: kp:ProductCategory
 type: attribute
 title: "Product Category"
 description: "Top-level merchandising category of the product."
+of: kp:Product
+tags: [core, approved]
 status: approved
-timestamp: 2026-07-14T00:00:00Z
+timestamp: 2026-07-15
 ---
 
 # Product Category
 
 Top-level merchandising category of the product.
 
+Attribute of [Product](../merchandising/product.md).
+
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Not yet generated — run `npm run build`._
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

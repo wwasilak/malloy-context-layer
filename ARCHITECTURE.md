@@ -1,55 +1,58 @@
-# Architecture & build
+# Architecture & build (v7 — simplified)
 
-Two planes, one build.
+Two things in git, one command, links between them.
 
-## Knowledge Plane — `kp/`
+## A) Knowledge Plane — `kp/` (OKF bundle)
 
-The canonical home of business meaning, as an [OKF](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf)-shaped bundle: one markdown file per concept, YAML frontmatter for the structured fields, prose in the body.
+Hand-edited markdown files (VS Code / Obsidian / OWOX Model Canvas), one concept
+per file, versioned in git. Folder = domain = steward. Identity = `uri:`
+frontmatter. Frontmatter: uri, type (entity | defined_class | measure |
+attribute), title, description, synonyms, steward, subtype_of, of (attribute →
+entity attachment), membership_rule, preferred_source, allowed_roles,
+last_validated (eval-runner-stamped), status (draft | in_review | approved |
+deprecated), tags. New concept = copy from `_templates/`. Files with any other
+`type` are operational docs, not concepts:
 
-- **Folder = domain = steward.** `sales/`, `finance/`, `merchandising/`, `operations/` hold stewarded concepts; `core/` holds shared, un-stewarded ones.
-- **Identity is the `uri:` frontmatter field**, not the file path — files can be moved or renamed freely as long as `uri` is untouched.
-- **Frontmatter fields:** `uri`, `type` (entity | defined_class | measure | attribute), `title`, `description`, and optionally `synonyms`, `steward`, `subtype_of`, `membership_rule` (required on every defined_class), `preferred_source`, `relationships` (declared on the domain-side entity), `status`, `timestamp`.
-- **Lifecycle:** `status: draft | approved | deprecated`. Only `approved` concepts are published to the agent map; models referencing non-approved concepts produce a build warning.
-- **Humans own meaning; the build owns bookkeeping.** Every `index.md` and every `## Implementations` section between the `GENERATED` markers is rewritten by the build — never edit those by hand.
-- `bundle.yaml` carries the namespace. `_templates/` has a starter file per concept kind: copy, fill in, set `status: draft`.
+- `kp/agent/examples.md` — canonical query shapes the agent copies
+- `kp/agent/gap-log.md` — agent-appended terms with no concept (demand-ranked backlog)
+- `kp/agent/corrections.md` — steward-confirmed wrong answers + standing hints
+- `kp/agent/evals/*.md` — gold-number cases (question, expected value, gold query)
 
-## Data Plane — `models/` + `ParquetFiles/`
+## B) Malloy models — `models/` + data
 
-Malloy models define sources, joins and metrics. `base.malloy` holds all plumbing; department models import and extend it. Models link to the Knowledge Plane with annotations and never define meaning themselves:
+Hand-written. Base model holds plumbing; department models import + extend.
+Served via Malloyyo, Malloy Publisher, or local malloy MCP — the plane is
+runtime-neutral (it's just files + CLAUDE.md).
 
-```malloy
-# concept = "kp:Customer"
-source: customer is duckdb.table('ParquetFiles/customer.parquet') ...
-```
+## C) Links
 
-Joins reference relationships via `# is_about_role = "kp:isPlacedBy"`.
+Declared in Malloy (`# concept = "kp:..."` on sources/fields, `# is_about_role`
+on joins) — owned by developers, guarded by the compiler. Projected back into
+the plane by the build: every concept file gets its Implementations table, and
+the root `kp/index.md` becomes the agent routing table (concept | kind | status
+| definition | binding) plus data coverage and the views inventory. There is no
+separate knowledge_map.json — the bundle IS the agent context.
 
-## Linking (hybrid)
+## Build: `node build.js`
 
-- **Fine-grained links live in Malloy** (`# concept` on sources/fields, `# is_about_role` on joins) — owned by developers, guarded by the compiler.
-- **Routing links live in the KP** (`preferred_source` in concept frontmatter) — owned by stewards, a governance decision.
-- **The build projects the full picture back into the KP**: each concept file gets a generated Implementations table (model / source / field), so the Knowledge Plane reads as one coherent document without anyone hand-maintaining the mapping.
+1. Load + validate bundle (frontmatter, unique URIs, subtype/of/relationship targets).
+2. Compile every model (imports resolve; annotations via the Annotations API).
+3. Referential validation, hard fail: every annotation resolves; every
+   preferred_source resolves to a real (model, source).
+4. Drift sensor: declared `of:` vs the entity of the source the field is
+   actually implemented on -> WARN.
+5. Coverage: approved-but-unbuilt concepts; built-but-ungoverned fields
+   (no # concept annotation) -> WARN.
+6. Write-back: Implementations tables, routing table (root index), domain
+   indexes, data coverage (min/max of bundle.yaml `temporal_anchor`), views.
+7. Regenerate `kp_viz.html` (needs GoogleCloudPlatform/knowledge-catalog cloned;
+   `--conceptual` variant available via make_viz.py directly).
 
-## Build
+CI: run build on every PR; fail on errors; fail if the working tree is dirty
+after build (forces committed write-back). CODEOWNERS per domain folder.
 
-```bash
-npm run build        # node exporter.js, from the repo root
-```
+## Agent protocol
 
-1. `okf-lib.js` loads and validates the bundle: frontmatter parses; required fields per type; unique URIs; `subtype_of` and relationship ranges resolve.
-2. `exporter.js` compiles every model in `models/` (loaded by URL so imports resolve; annotations read via the Annotations API, never regex).
-3. Cross-plane validation, hard fail: every `# concept` / `# is_about_role` annotation resolves to a concept/relationship file; every `preferred_source` resolves to a real compiled (model, source).
-4. Emits `knowledge_map.json` — the agent-facing routing map (approved concepts only, no field inventory).
-5. Write-back: regenerates all `index.md` files and every `## Implementations` section.
-
-Run from the repo root — DuckDB resolves `ParquetFiles/...` relative to it.
-
-## Workflows
-
-**Add a concept:** copy the matching `_templates/` file into the right domain folder, fill in the frontmatter, `status: draft`. Promote to `approved` when the steward signs off.
-
-**Link it from a model:** add `# concept = "kp:..."` above the source or field. Build fails if the URI has no concept file — creating the meaning always precedes linking it.
-
-**Retire a concept:** set `status: deprecated`. It drops out of the agent map; any model still linking it shows up as a build warning.
-
-**Add a relationship:** add it under `relationships:` in the frontmatter of the *domain-side* entity's file, then reference it from the Malloy join with `# is_about_role`.
+`CLAUDE.md` — routing via the root table, bindings resolve concept -> field,
+membership rules via bound measures, time windows anchored to data coverage,
+gap-log + corrections write-path, runtime-neutral execution rules.

@@ -1,1 +1,2 @@
 namespace: "https://yourorg.example/kp#"
+temporal_anchor: kp:OrderDate

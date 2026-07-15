@@ -1,19 +1,24 @@
 ---
-uri: "kp:ProductSubCategory"
+uri: kp:ProductSubCategory
 type: attribute
 title: "Product Sub-Category"
 description: "Merchandising sub-category of the product, below its top-level category."
 steward: Merchandising
+of: kp:Product
+tags: [Merchandising, approved]
 status: approved
-timestamp: 2026-07-14T00:00:00Z
+approved_by: Merchandising
+timestamp: 2026-07-15
 ---
 
 # Product Sub-Category
 
 Merchandising sub-category of the product, below its top-level category.
 
+Attribute of [Product](product.md).
+
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Not yet generated — run `npm run build`._
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

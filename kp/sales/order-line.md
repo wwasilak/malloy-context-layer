@@ -1,20 +1,22 @@
 ---
-uri: "kp:OrderLine"
+uri: kp:OrderLine
 type: entity
 title: "Order Line"
 description: "A single line on an order, recording one product, its quantity and the prices applied at sale time."
 synonyms: ["order row"]
 steward: Sales
-preferred_source: "base.order_line_in_context"
+preferred_source: base.order_line_in_context
 relationships:
-  - uri: "kp:isConvertedVia"
+  - uri: kp:isConvertedVia
     verb: "is converted via"
-    range: "kp:CurrencyExchangeRate"
-  - uri: "kp:recordsSaleOf"
+    range: kp:CurrencyExchangeRate
+  - uri: kp:recordsSaleOf
     verb: "records sale of"
-    range: "kp:Product"
+    range: kp:Product
+tags: [Sales, approved]
 status: approved
-timestamp: 2026-07-14T00:00:00Z
+approved_by: Sales
+timestamp: 2026-07-15
 ---
 
 # Order Line
@@ -23,11 +25,11 @@ A single line on an order, recording one product, its quantity and the prices ap
 
 ## Relationships
 
-- *is converted via* → [Currency Exchange Rate](/kp/finance/currency-exchange-rate.md) (`kp:isConvertedVia`)
-- *records sale of* → [Product](/kp/merchandising/product.md) (`kp:recordsSaleOf`)
+- *is converted via* → [Currency Exchange Rate](../finance/currency-exchange-rate.md) (`kp:isConvertedVia`)
+- *records sale of* → [Product](../merchandising/product.md) (`kp:recordsSaleOf`)
 
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Not yet generated — run `npm run build`._
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

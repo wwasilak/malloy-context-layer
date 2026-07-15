@@ -1,19 +1,24 @@
 ---
-uri: "kp:StoreSquareMeters"
+uri: kp:StoreSquareMeters
 type: attribute
 title: "Store Square Meters"
 description: "Selling floor area of a store, in square meters."
 steward: "Retail Operations"
+of: kp:Store
+tags: ["Retail Operations", approved]
 status: approved
-timestamp: 2026-07-14T00:00:00Z
+approved_by: "Retail Operations"
+timestamp: 2026-07-15
 ---
 
 # Store Square Meters
 
 Selling floor area of a store, in square meters.
 
+Attribute of [Store](store.md).
+
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Not yet generated — run `npm run build`._
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

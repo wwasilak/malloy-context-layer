@@ -1,18 +1,22 @@
 ---
-uri: "kp:ProductBrand"
+uri: kp:ProductBrand
 type: attribute
 title: "Product Brand"
 description: "Brand under which the product is sold."
+of: kp:Product
+tags: [core, approved]
 status: approved
-timestamp: 2026-07-14T00:00:00Z
+timestamp: 2026-07-15
 ---
 
 # Product Brand
 
 Brand under which the product is sold.
 
+Attribute of [Product](../merchandising/product.md).
+
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Not yet generated — run `npm run build`._
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

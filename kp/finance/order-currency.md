@@ -1,19 +1,24 @@
 ---
-uri: "kp:OrderCurrency"
+uri: kp:OrderCurrency
 type: attribute
 title: "Order Currency"
 description: "The original transaction currency in which an order was placed."
 steward: Finance
+of: kp:Order
+tags: [Finance, approved]
 status: approved
-timestamp: 2026-07-14T00:00:00Z
+approved_by: Finance
+timestamp: 2026-07-15
 ---
 
 # Order Currency
 
 The original transaction currency in which an order was placed.
 
+Attribute of [Order](../sales/order.md).
+
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Not yet generated — run `npm run build`._
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

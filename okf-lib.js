@@ -1,10 +1,10 @@
 // =============================================================================
 // okf-lib.js — Knowledge Plane as an OKF bundle (markdown + YAML frontmatter).
 // Replaces the MOTLY parser. Three responsibilities:
-//   loadBundle(dir)   -> { namespace, canon, rels }   (registry, same shape as before)
-//   emitMap(...)      -> knowledge_map.json object    (agent routing map)
-//   writeBack(...)    -> regenerate index.md files + "## Implementations"
-//                        sections between GENERATED markers in concept files.
+//   loadBundle(dir)   -> { namespace, config, canon, rels } registry. Files whose
+//                        type is not a concept kind are operational docs (skipped).
+//   writeBack(...)    -> regenerate the root routing table (index.md), domain
+//                        indexes, and the GENERATED "## Implementations" sections.
 // Humans own meaning (frontmatter + prose). The build owns bookkeeping.
 // =============================================================================
 const fs = require('fs');
@@ -23,11 +23,11 @@ function loadBundle(dir) {
   const rels = {};    // uri -> { label(verb), domain, range }
 
   // bundle-level config
-  let namespace = null;
+  let namespace = null, config = {};
   const cfgPath = path.join(dir, 'bundle.yaml');
   if (fs.existsSync(cfgPath)) {
-    const cfg = matter('---\n' + fs.readFileSync(cfgPath, 'utf8') + '\n---\n').data;
-    namespace = cfg.namespace || null;
+    config = matter('---\n' + fs.readFileSync(cfgPath, 'utf8') + '\n---\n').data || {};
+    namespace = config.namespace || null;
   }
   if (!namespace) errors.push(`[KP] missing or empty ${cfgPath} (needs: namespace)`);
 
@@ -47,9 +47,9 @@ function loadBundle(dir) {
     catch (e) { errors.push(`[KP] ${rel}: broken YAML frontmatter — ${e.message}`); continue; }
     const d = fm.data;
 
-    if (!d.uri)  { errors.push(`[KP] ${rel}: missing required field 'uri'`); continue; }
     if (!d.type) { errors.push(`[KP] ${rel}: missing required field 'type'`); continue; }
-    if (!KINDS.has(d.type)) errors.push(`[KP] ${rel}: unknown type '${d.type}'`);
+    if (!KINDS.has(d.type)) continue; // operational doc (evals, gap-log, ...) — not a concept
+    if (!d.uri)  { errors.push(`[KP] ${rel}: missing required field 'uri'`); continue; }
     if (!d.title) errors.push(`[KP] ${rel}: missing 'title'`);
     if (!d.description) errors.push(`[KP] ${rel}: missing 'description'`);
     if (d.type === 'defined_class' && !d.membership_rule)
@@ -63,8 +63,11 @@ function loadBundle(dir) {
       synonyms: Array.isArray(d.synonyms) ? d.synonyms : [],
       steward: d.steward || null,
       subtype_of: d.subtype_of || null,
+      of: d.of || null,
       membership_rule: d.membership_rule || null,
       preferred_source: d.preferred_source || null,
+      allowed_roles: Array.isArray(d.allowed_roles) ? d.allowed_roles : null,
+      last_validated: d.last_validated || null,
       status: d.status || 'draft',
       _path: rel,
       _domain: rel.split(path.sep)[0],
@@ -87,41 +90,18 @@ function loadBundle(dir) {
   for (const [ruri, r] of Object.entries(rels)) {
     if (!canon[r.range]) errors.push(`[KP] relationship ${ruri}: range '${r.range}' has no concept file`);
   }
-  return { namespace, canon, rels, errors };
-}
-
-// ---- 2. emit the agent map (same shape as the MOTLY-era output) --------------
-function emitMap({ namespace, canon, rels }, touch, usedRels, implementations) {
-  const order = ['entity', 'defined_class', 'measure', 'attribute'];
-  const uris = Object.keys(canon)
-    .filter((u) => touch[u] && canon[u].status === 'approved')
-    .sort((a, b) =>
-      (order.indexOf(canon[a].kind) - order.indexOf(canon[b].kind)) || a.localeCompare(b));
-
-  return {
-    _doc: 'Knowledge Plane — agent context. Meaning + routing only; fields live in the Malloy models (compile the named source). If a term is not a concept here, it is NOT modelled — say so; do not improvise it from raw columns.',
-    namespace,
-    concepts: uris.map((u) => {
-      const c = canon[u];
-      const o = { uri: u, kind: c.kind, label: c.label, definition: c.definition,
-                  models: [...touch[u]].sort() };
-      if (c.synonyms.length) o.synonyms = c.synonyms;
-      if (c.steward) o.steward = c.steward;
-      if (c.subtype_of) o.subtype_of = c.subtype_of;
-      if (c.membership_rule) o.membership_rule = c.membership_rule;
-      if (c.preferred_source) o.preferred_source = c.preferred_source;
-      return o;
-    }),
-    relationships: [...usedRels].sort().map((u) => {
-      const r = rels[u];
-      return { uri: u, verb: r.label, domain: r.domain, range: r.range };
-    }),
-  };
+  return { namespace, config, canon, rels, errors };
 }
 
 // ---- 3. write back: Implementations sections + index.md files ----------------
 // implementations: uri -> [{model, source, field|null (null = the source itself)}]
-function writeBack(dir, { canon }, implementations) {
+function writeBack(dir, { canon }, implementations, sourceConcepts = {}, extras = {}) {
+  const { views = [], coverage = null } = extras;
+  // sourceConcepts: "model.source" -> concept URI of that source (from compile)
+  const relLink = (fromPath, toPath) => {
+    const rel = path.relative(path.dirname(fromPath), toPath).split(path.sep).join('/');
+    return rel;
+  };
   let touched = 0;
   for (const [uri, c] of Object.entries(canon)) {
     const file = path.join(dir, c._path);
@@ -139,6 +119,12 @@ function writeBack(dir, { canon }, implementations) {
         .map((i) => `| ${i.model} | \`${i.source}\` | ${i.field ? '`' + i.field + '`' : '*(source)*'} |`);
       section = ['| Model | Source | Field |', '|---|---|---|', ...rows].join('\n');
       if (c.preferred_source) section += `\n\n**Preferred source:** \`${c.preferred_source}\``;
+      // link measures/attributes to the entity of their host source (graph edge)
+      if ((c.kind === 'measure' || c.kind === 'attribute') && !c.of) {
+        const hosts = [...new Set(impls.map(i => sourceConcepts[`${i.model}.${i.source}`]).filter(h => h && h !== uri && canon[h]))];
+        if (hosts.length)
+          section += '\n\nMeasured on ' + hosts.map(h => `[${canon[h].label}](${relLink(c._path, canon[h]._path)})`).join(', ') + '.';
+      }
     }
     const next = text.slice(0, b + GEN_BEGIN.length) + '\n' + section + '\n' + text.slice(e);
     if (next !== text) { fs.writeFileSync(file, next); touched++; }
@@ -164,19 +150,44 @@ function writeBack(dir, { canon }, implementations) {
     ];
     fs.writeFileSync(path.join(dir, domain, 'index.md'), lines.join('\n'));
   }
+  // root index = the agent's routing table (replaces knowledge_map.json)
+  const bindingOf = (uri) => {
+    const impls = implementations[uri] || [];
+    const pref = canon[uri].preferred_source;
+    const sorted = impls
+      .map((i) => ({ v: `${i.model}.${i.source}` + (i.field ? `.${i.field}` : ''), p: pref === `${i.model}.${i.source}` }))
+      .sort((a, b) => (b.p - a.p) || a.v.localeCompare(b.v));
+    return sorted.length ? sorted[0].v : '';
+  };
+  const kindOrder2 = ['entity', 'defined_class', 'measure', 'attribute'];
+  const allUris = Object.keys(canon).sort((a, b) =>
+    (kindOrder2.indexOf(canon[a].kind) - kindOrder2.indexOf(canon[b].kind)) || a.localeCompare(b));
   const rootLines = [
-    '<!-- GENERATED by exporter — do not edit. -->',
-    '# Knowledge Plane — domains', '',
-    ...Object.keys(byDomain).sort().map((d) => {
-      const n = byDomain[d].length;
-      const stewards = [...new Set(byDomain[d].map((u) => canon[u].steward).filter(Boolean))];
-      return `- [**${d}**](./${d}/index.md) — ${n} concepts${stewards.length ? ` (steward: ${stewards.join(', ')})` : ''}`;
-    }), '',
-    'Start at a domain index, then open the concept file. Concept files carry meaning;',
-    'their `## Implementations` sections and all `index.md` files are build-generated.', '',
+    '<!-- GENERATED by build — do not edit. -->',
+    '# Knowledge Plane', '',
+    'Read this table whole for routing; open a concept file for full meaning',
+    '(synonyms, membership rules, relationships, implementations). Only',
+    '`approved` concepts are governed. If a term is not here, it is NOT modelled.', '',
   ];
+  if (coverage) rootLines.push(
+    `**Data coverage** (${coverage.anchor_concept}): ${coverage.min_date} .. ${coverage.max_date} — ` +
+    'anchor relative time windows to max_date, not today, and say so.', '');
+  if (views.length) {
+    rootLines.push('**Views (sanctioned query surfaces):** ' +
+      views.map(v => '`' + v.path + '`' + (v.description ? ` (${v.description})` : '')).join(', '), '');
+  }
+  rootLines.push('| Concept | Kind | Status | Definition | Binding |', '|---|---|---|---|---|');
+  for (const u of allUris) {
+    const c = canon[u];
+    const b = bindingOf(u);
+    rootLines.push(`| [${c.label}](./${c._path.split(path.sep).join('/')}) \`${u}\` | ${c.kind} | ${c.status} | ${c.definition} | ${b ? '\`' + b + '\`' : '—'} |`);
+  }
+  rootLines.push('', 'Domains: ' + Object.keys(byDomain).sort().map(d => `[${d}](./${d}/index.md)`).join(' · '));
+  if (fs.existsSync(path.join(dir, 'agent')))
+    rootLines.push('', 'Operational: [examples](./agent/examples.md) · [gap log](./agent/gap-log.md) · [corrections](./agent/corrections.md) · [evals](./agent/evals/)');
+  rootLines.push('');
   fs.writeFileSync(path.join(dir, 'index.md'), rootLines.join('\n'));
   return touched;
 }
 
-module.exports = { loadBundle, emitMap, writeBack, GEN_BEGIN, GEN_END };
+module.exports = { loadBundle, writeBack, GEN_BEGIN, GEN_END };

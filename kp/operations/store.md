@@ -1,11 +1,13 @@
 ---
-uri: "kp:Store"
+uri: kp:Store
 type: entity
 title: Store
 description: "A physical or online point of sale where orders are placed."
 steward: "Retail Operations"
+tags: ["Retail Operations", approved]
 status: approved
-timestamp: 2026-07-14T00:00:00Z
+approved_by: "Retail Operations"
+timestamp: 2026-07-15
 ---
 
 # Store
@@ -15,5 +17,5 @@ A physical or online point of sale where orders are placed.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Not yet generated — run `npm run build`._
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

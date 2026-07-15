@@ -1,19 +1,24 @@
 ---
-uri: "kp:ProductColor"
+uri: kp:ProductColor
 type: attribute
 title: "Product Color"
 description: "Color the product is sold in."
 steward: Merchandising
+of: kp:Product
+tags: [Merchandising, approved]
 status: approved
-timestamp: 2026-07-14T00:00:00Z
+approved_by: Merchandising
+timestamp: 2026-07-15
 ---
 
 # Product Color
 
 Color the product is sold in.
 
+Attribute of [Product](product.md).
+
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Not yet generated — run `npm run build`._
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->
