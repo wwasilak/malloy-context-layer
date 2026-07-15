@@ -17,5 +17,9 @@ Total sales divided by total store selling area, a retail productivity measure.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Not yet generated — run `node build.js`._
+| Model | Source | Field |
+|---|---|---|
+| operations | `store_portfolio` | `sales_per_square_meter` |
+
+Measured on [Store](store.md).
 <!-- END GENERATED -->

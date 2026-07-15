@@ -17,5 +17,9 @@ Average catalog margin of products: (list price minus unit cost) divided by list
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Not yet generated — run `node build.js`._
+| Model | Source | Field |
+|---|---|---|
+| merchandising | `product_performance` | `avg_list_price_margin_percent` |
+
+Measured on [Product](product.md).
 <!-- END GENERATED -->

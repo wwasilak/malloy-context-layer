@@ -17,5 +17,9 @@ Number of order lines in scope.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Not yet generated — run `node build.js`._
+| Model | Source | Field |
+|---|---|---|
+| sales | `sales_performance` | `line_count` |
+
+Measured on [Order](../sales/order.md).
 <!-- END GENERATED -->

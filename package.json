@@ -2,7 +2,7 @@
   "name": "malloy-knowledge-plane-okf",
   "private": true,
   "scripts": {
-    "build": "cross-env MODELS_DIR=models node exporter.js"
+    "build": "cross-env MODELS_DIR=models node build.js"
   },
   "devDependencies": {
     "cross-env": "^7.0.3"

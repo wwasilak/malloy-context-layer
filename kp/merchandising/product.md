@@ -17,5 +17,8 @@ A sellable item offered to customers, identified by a stable product key.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Not yet generated — run `node build.js`._
+| Model | Source | Field |
+|---|---|---|
+| base | `product` | *(source)* |
+| merchandising | `product_performance` | *(source)* |
 <!-- END GENERATED -->

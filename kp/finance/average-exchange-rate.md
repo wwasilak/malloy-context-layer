@@ -17,5 +17,9 @@ Average currency exchange rate applied to convert order lines into the reporting
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Not yet generated — run `node build.js`._
+| Model | Source | Field |
+|---|---|---|
+| finance | `finance_order` | `average_exchange_rate` |
+
+Measured on [Order](../sales/order.md).
 <!-- END GENERATED -->

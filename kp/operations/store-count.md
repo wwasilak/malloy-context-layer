@@ -17,5 +17,9 @@ Number of distinct stores in scope.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Not yet generated — run `node build.js`._
+| Model | Source | Field |
+|---|---|---|
+| operations | `store_portfolio` | `store_count` |
+
+Measured on [Store](store.md).
 <!-- END GENERATED -->
