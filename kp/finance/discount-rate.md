@@ -17,5 +17,9 @@ Discount amount as a share of gross (list) revenue.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Not yet generated — run `node build.js`._
+| Model | Source | Field |
+|---|---|---|
+| finance | `finance_order` | `discount_rate` |
+
+Measured on [Order](../sales/order.md).
 <!-- END GENERATED -->

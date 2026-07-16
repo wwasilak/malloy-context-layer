@@ -15,5 +15,10 @@ Gross margin expressed as a ratio of total sales.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Not yet generated — run `node build.js`._
+| Model | Source | Field |
+|---|---|---|
+| base | `sales_order` | `margin_percent` |
+| finance | `finance_order` | `gross_margin_percent` |
+
+Measured on [Order](../sales/order.md).
 <!-- END GENERATED -->

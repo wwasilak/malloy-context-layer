@@ -18,5 +18,7 @@ Attribute of [Product](../merchandising/product.md).
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Not yet generated — run `node build.js`._
+| Model | Source | Field |
+|---|---|---|
+| base | `product` | `Brand` |
 <!-- END GENERATED -->

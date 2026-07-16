@@ -17,5 +17,9 @@ Gross margin expressed as a share of cost of goods sold: margin divided by total
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Not yet generated — run `node build.js`._
+| Model | Source | Field |
+|---|---|---|
+| finance | `finance_order` | `markup_percent` |
+
+Measured on [Order](../sales/order.md).
 <!-- END GENERATED -->

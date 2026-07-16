@@ -17,5 +17,9 @@ The channel through which an order was placed: Online or Physical store.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Not yet generated — run `node build.js`._
+| Model | Source | Field |
+|---|---|---|
+| base | `sales_order` | `channel` |
+
+Measured on [Order](../sales/order.md).
 <!-- END GENERATED -->

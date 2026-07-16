@@ -15,5 +15,11 @@ Gross margin: total sales minus total cost.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Not yet generated — run `node build.js`._
+| Model | Source | Field |
+|---|---|---|
+| base | `sales_order` | `margin` |
+| finance | `finance_order` | `gross_profit` |
+| merchandising | `product_performance` | `margin` |
+
+Measured on [Order](../sales/order.md), [Product](../merchandising/product.md).
 <!-- END GENERATED -->
