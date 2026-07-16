@@ -18,7 +18,5 @@ Attribute of [Store](../operations/store.md).
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| base | `store` | `CountryName` |
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

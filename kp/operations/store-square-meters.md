@@ -20,7 +20,5 @@ Attribute of [Store](store.md).
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| operations | `store_portfolio` | `square_meters` |
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

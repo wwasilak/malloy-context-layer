@@ -17,9 +17,5 @@ Number of stores in scope that are not closed.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| operations | `store_portfolio` | `active_store_count` |
-
-Measured on [Store](store.md).
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

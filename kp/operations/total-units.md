@@ -17,10 +17,5 @@ Total number of product units sold across all order lines in scope.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| merchandising | `product_performance` | `total_units` |
-| sales | `sales_performance` | `total_units` |
-
-Measured on [Product](../merchandising/product.md), [Order](../sales/order.md).
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

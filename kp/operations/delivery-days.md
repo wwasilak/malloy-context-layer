@@ -17,9 +17,5 @@ Number of days between the order date and the delivery date for an order.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| operations | `operations_order` | `delivery_days` |
-
-Measured on [Order](../sales/order.md).
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

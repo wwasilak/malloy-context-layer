@@ -18,8 +18,5 @@ Attribute of [Order](../sales/order.md).
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| base | `order` | `DT` |
-| base | `sales_order` | `DT` |
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

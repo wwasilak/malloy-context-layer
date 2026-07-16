@@ -76,7 +76,7 @@ async function compileModel(filePath) {
       if (isJoin && role) joinRoles.push(role);
       if (isView) views.push({ name: f.name, description: tagValue(f, 'description') });
       if (fc) fieldConcepts.push({ concept: fc, field: f.name });
-      else if (!isJoin && !isView && f.expression) ungoverned.push(f.name);
+      else if (!isJoin && !isView) ungoverned.push(f.name);
     }
     sources[exp.name] = { concept: conceptOf(exp), fieldConcepts, joinRoles, views, ungoverned };
   }

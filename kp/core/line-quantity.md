@@ -18,8 +18,5 @@ Attribute of [Order Line](../sales/order-line.md).
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| base | `order_line_in_context` | `Quantity` |
-| base | `order_line` | `Quantity` |
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

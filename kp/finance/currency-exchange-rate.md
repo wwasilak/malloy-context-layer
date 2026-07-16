@@ -17,7 +17,5 @@ The daily rate for converting an amount from one currency into a reporting curre
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| base | `currency_exchange_rate` | *(source)* |
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

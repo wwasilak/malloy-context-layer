@@ -11,7 +11,8 @@
   directly — do NOT describe/compile just to find a field name. Inspect a source
   only when composing (to browse dimensions) or when a binding is missing.
 - **`kp/agent/`** — operational docs: `examples.md` (copy these query shapes),
-  `gap-log.md`, `corrections.md` (check Standing hints before answering), `evals/`.
+  `gap-log.md`, `question-log.md`, `corrections.md` (check Standing hints
+  before answering), `evals/`.
 
 ## Routing: question -> answer
 
@@ -30,11 +31,42 @@
 6. Respect `allowed_roles` where present: if the requester's role is unknown or
    not listed, do not return that concept's figures.
 
+## Analysis freedom: the KP governs definitions, not analysis
+
+Three tiers — know which one you are in:
+
+1. **Governed metrics** (in the routing table): resolve via bindings, apply
+   membership rules verbatim. Never redefine one differently.
+2. **Analysis OVER governed metrics** — trends, YoY growth, shares of total,
+   ratios, projections, decompositions, cohorts, what-ifs. This is your job and
+   you have FULL Malloy freedom for it: `calculate:` with `lag()`/`lead()`,
+   `all()` for percent-of-total, `nest:` for breakdowns, `pick` for banding —
+   see the exploratory patterns in `kp/agent/examples.md`. A projection built
+   on kp:TotalSales inherits its governance; do not treat the task as
+   ungoverned and do not gap-log analysis verbs (forecast, trend, compare).
+   Present with a one-line basis note: which governed metrics it uses and the
+   method (e.g. "naive YoY extrapolation of TotalSales").
+3. **New metrics improvised from raw columns**: allowed only as clearly labeled
+   *ungoverned / exploratory* figures — never presented as official. This is
+   the only tier that belongs in the gap log.
+
 ## When a term is NOT in the routing table
 
-- It is NOT governed. Say so. You MAY explore raw columns to help, but label any
-  such figure *ungoverned / exploratory* — never present it as an official metric.
-- Append one line to `kp/agent/gap-log.md` (date | term | action taken).
+- If it is a **business metric or entity** someone might govern (e.g. "customer
+  lifetime value"): say it is not governed, optionally compute an exploratory
+  version (tier 3), and append one line to `kp/agent/gap-log.md`
+  (date | term | action taken).
+- If it is an **analysis verb or technique** (forecast, trend, YoY): tier 2 —
+  just do it. Not a gap.
+- If it is **out of scope** for this dataset (personal finances, other
+  companies): say so briefly. Not a gap.
+
+## After answering a NOVEL analysis (tier 2 or 3)
+
+- Append one line to `kp/agent/question-log.md` (date | question | concepts
+  used | method | tier). Routine lookups of a single governed metric are NOT
+  novel - do not log them. Recurring question-log entries are candidates for
+  promotion to a governed view or concept.
 
 ## When the user says an answer was wrong
 

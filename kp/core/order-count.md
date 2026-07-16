@@ -15,9 +15,5 @@ Number of distinct orders in scope.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| base | `sales_order` | `order_count` |
-
-Measured on [Order](../sales/order.md).
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

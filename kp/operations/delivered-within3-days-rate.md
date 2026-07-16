@@ -17,9 +17,5 @@ Share of orders in scope delivered within three days of the order date.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| operations | `operations_order` | `delivered_within_3d_rate` |
-
-Measured on [Order](../sales/order.md).
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

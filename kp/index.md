@@ -5,65 +5,63 @@ Read this table whole for routing; open a concept file for full meaning
 (synonyms, membership rules, relationships, implementations). Only
 `approved` concepts are governed. If a term is not here, it is NOT modelled.
 
-**Data coverage** (kp:OrderDate): 2015-01-01 .. 2024-04-20 — anchor relative time windows to max_date, not today, and say so.
-
 | Concept | Kind | Status | Definition | Binding |
 |---|---|---|---|---|
-| [Calendar Date](./finance/calendar-date.md) `kp:CalendarDate` | entity | approved | A single calendar day, used as the temporal anchor for transactions and reporting periods. | `base.calendar_date` |
-| [Currency Exchange Rate](./finance/currency-exchange-rate.md) `kp:CurrencyExchangeRate` | entity | approved | The daily rate for converting an amount from one currency into a reporting currency. | `base.currency_exchange_rate` |
-| [Customer](./sales/customer.md) `kp:Customer` | entity | approved | A natural or legal person who buys products from the company. | `base.customer_order_in_context` |
-| [Order](./sales/order.md) `kp:Order` | entity | approved | A purchase transaction placed by a customer at a store on a given date, composed of one or more order lines. | `base.sales_order` |
-| [Order Line](./sales/order-line.md) `kp:OrderLine` | entity | approved | A single line on an order, recording one product, its quantity and the prices applied at sale time. | `base.order_line_in_context` |
-| [Product](./merchandising/product.md) `kp:Product` | entity | approved | A sellable item offered to customers, identified by a stable product key. | `base.product` |
-| [Store](./operations/store.md) `kp:Store` | entity | approved | A physical or online point of sale where orders are placed. | `base.store` |
-| [Active Customer](./sales/active-customer.md) `kp:ActiveCustomer` | defined_class | approved | A customer with at least one order in the last 2 years. | `base.customer_order_in_context.is_active_customer` |
-| [Active Store Count](./operations/active-store-count.md) `kp:ActiveStoreCount` | measure | approved | Number of stores in scope that are not closed. | `operations.store_portfolio.active_store_count` |
-| [Average Exchange Rate](./finance/average-exchange-rate.md) `kp:AverageExchangeRate` | measure | approved | Average currency exchange rate applied to convert order lines into the reporting currency. | `finance.finance_order.average_exchange_rate` |
-| [Average Order Value](./sales/average-order-value.md) `kp:AverageOrderValue` | measure | approved | Average revenue per order: total sales divided by order count. | `sales.sales_performance.average_order_value` |
-| [Average Selling Price](./finance/average-selling-price.md) `kp:AverageSellingPrice` | measure | approved | Net sales divided by units sold; the average realized price per unit. (ASP) | `finance.finance_order.average_selling_price` |
-| [Average Delivery Days](./operations/avg-delivery-days.md) `kp:AvgDeliveryDays` | measure | approved | Average number of days between order date and delivery date across orders in scope. | `operations.operations_order.avg_delivery_days` |
-| [Delivered Within 3 Days Rate](./operations/delivered-within3-days-rate.md) `kp:DeliveredWithin3DaysRate` | measure | approved | Share of orders in scope delivered within three days of the order date. | `operations.operations_order.delivered_within_3d_rate` |
-| [Discount Amount](./finance/discount-amount.md) `kp:DiscountAmount` | measure | approved | Total discount given: gross (list) revenue minus net sales, in the reporting currency. | `finance.finance_order.discount_amount` |
-| [Discount Rate](./finance/discount-rate.md) `kp:DiscountRate` | measure | approved | Discount amount as a share of gross (list) revenue. | `finance.finance_order.discount_rate` |
-| [Distinct Products Sold](./merchandising/distinct-products-sold.md) `kp:DistinctProductsSold` | measure | approved | Number of distinct products that appear on at least one order line in scope. | `merchandising.product_line.distinct_products_sold` |
-| [Gross Revenue](./finance/gross-revenue.md) `kp:GrossRevenue` | measure | approved | Total revenue valued at list price, before discounts, in the reporting currency. | `finance.finance_order.gross_revenue` |
-| [Line Cost](./core/line-cost.md) `kp:LineCost` | measure | approved | Cost of goods sold for one order line: quantity times unit cost. | `base.order_line_in_context.line_cost` |
-| [Line Count](./operations/line-count.md) `kp:LineCount` | measure | approved | Number of order lines in scope. | `sales.sales_performance.line_count` |
-| [Line Discount](./core/line-discount.md) `kp:LineDiscount` | measure | approved | Discount given on one order line: quantity times (list price minus net price). | `base.order_line_in_context.line_discount` |
-| [Line List Revenue](./core/line-list-revenue.md) `kp:LineListRevenue` | measure | approved | Revenue for one order line valued at list price (before discount): quantity times unit list price. | `base.order_line_in_context.line_list_revenue` |
-| [Line Revenue](./core/line-revenue.md) `kp:LineRevenue` | measure | approved | Gross revenue for one order line: quantity times net price. | `base.order_line_in_context.line_revenue` |
-| [List Price Margin Percent](./merchandising/list-price-margin-percent.md) `kp:ListPriceMarginPercent` | measure | approved | Average catalog margin of products: (list price minus unit cost) divided by list price. | `merchandising.product_performance.avg_list_price_margin_percent` |
-| [Margin](./core/margin.md) `kp:Margin` | measure | approved | Gross margin: total sales minus total cost. | `base.sales_order.margin` |
-| [Margin Percent](./core/margin-percent.md) `kp:MarginPercent` | measure | approved | Gross margin expressed as a ratio of total sales. | `base.sales_order.margin_percent` |
-| [Markup Percent](./finance/markup-percent.md) `kp:MarkupPercent` | measure | approved | Gross margin expressed as a share of cost of goods sold: margin divided by total cost. | `finance.finance_order.markup_percent` |
-| [Order Count](./core/order-count.md) `kp:OrderCount` | measure | approved | Number of distinct orders in scope. | `base.sales_order.order_count` |
-| [Sales Per Square Meter](./operations/sales-per-square-meter.md) `kp:SalesPerSquareMeter` | measure | approved | Total sales divided by total store selling area, a retail productivity measure. | `operations.store_portfolio.sales_per_square_meter` |
-| [Store Count](./operations/store-count.md) `kp:StoreCount` | measure | approved | Number of distinct stores in scope. | `operations.store_portfolio.store_count` |
-| [Total Cost](./core/total-cost.md) `kp:TotalCost` | measure | approved | Sum of line cost across all order lines in scope. | `base.sales_order.total_cost` |
-| [Total Sales](./core/total-sales.md) `kp:TotalSales` | measure | approved | Sum of line revenue across all order lines in scope. | `base.sales_order.total_sales` |
-| [Total Units](./operations/total-units.md) `kp:TotalUnits` | measure | approved | Total number of product units sold across all order lines in scope. | `merchandising.product_performance.total_units` |
-| [Units Per Order](./operations/units-per-order.md) `kp:UnitsPerOrder` | measure | approved | Average number of product units per order: total units divided by order count. | `sales.sales_performance.units_per_order` |
-| [Customer Age](./core/customer-age.md) `kp:CustomerAge` | attribute | approved | Age of the customer in years. | `base.customer_order_in_context.Age` |
-| [Customer City](./core/customer-city.md) `kp:CustomerCity` | attribute | approved | City of residence of the customer. | `base.customer_order_in_context.City` |
-| [Customer Country](./core/customer-country.md) `kp:CustomerCountry` | attribute | approved | Country of residence of the customer. | `base.customer_order_in_context.Country` |
-| [Customer Gender](./core/customer-gender.md) `kp:CustomerGender` | attribute | approved | Gender of the customer. | `base.customer_order_in_context.Gender` |
-| [Customer Occupation](./core/customer-occupation.md) `kp:CustomerOccupation` | attribute | approved | Stated occupation of the customer. | `base.customer_order_in_context.Occupation` |
-| [Delivery Days](./operations/delivery-days.md) `kp:DeliveryDays` | attribute | approved | Number of days between the order date and the delivery date for an order. | `operations.operations_order.delivery_days` |
-| [Line Quantity](./core/line-quantity.md) `kp:LineQuantity` | attribute | approved | Number of product units on the order line. | `base.order_line_in_context.Quantity` |
-| [Order Currency](./finance/order-currency.md) `kp:OrderCurrency` | attribute | approved | The original transaction currency in which an order was placed. | `finance.finance_order.order_currency` |
-| [Order Date](./core/order-date.md) `kp:OrderDate` | attribute | approved | The calendar date on which the order was placed. | `base.order.DT` |
-| [Product Brand](./core/product-brand.md) `kp:ProductBrand` | attribute | approved | Brand under which the product is sold. | `base.product.Brand` |
-| [Product Category](./core/product-category.md) `kp:ProductCategory` | attribute | approved | Top-level merchandising category of the product. | `base.product.CategoryName` |
-| [Product Color](./merchandising/product-color.md) `kp:ProductColor` | attribute | approved | Color the product is sold in. | `merchandising.product_performance.color` |
-| [Product Manufacturer](./merchandising/product-manufacturer.md) `kp:ProductManufacturer` | attribute | approved | Manufacturer that produces the product. | `merchandising.product_performance.manufacturer` |
-| [Product Sub-Category](./merchandising/product-sub-category.md) `kp:ProductSubCategory` | attribute | approved | Merchandising sub-category of the product, below its top-level category. | `merchandising.product_performance.sub_category` |
-| [Product Unit Cost](./core/product-unit-cost.md) `kp:ProductUnitCost` | attribute | approved | Cost to the company of one unit of the product. | `base.product.Cost` |
-| [Product Unit Price](./core/product-unit-price.md) `kp:ProductUnitPrice` | attribute | approved | List selling price of one unit of the product. | `base.product.Price` |
-| [Sales Channel](./operations/sales-channel.md) `kp:SalesChannel` | attribute | approved | The channel through which an order was placed: Online or Physical store. | `base.sales_order.channel` |
-| [Store Country](./core/store-country.md) `kp:StoreCountry` | attribute | approved | Country in which the store operates. | `base.store.CountryName` |
-| [Store Open Date](./operations/store-open-date.md) `kp:StoreOpenDate` | attribute | approved | The date on which a store opened for business. | `operations.store_portfolio.store_open_date` |
-| [Store Square Meters](./operations/store-square-meters.md) `kp:StoreSquareMeters` | attribute | approved | Selling floor area of a store, in square meters. | `operations.store_portfolio.square_meters` |
-| [Store Status](./operations/store-status.md) `kp:StoreStatus` | attribute | approved | Operating status of a store, e.g. open or closed. | `operations.store_portfolio.store_status` |
+| [Calendar Date](./finance/calendar-date.md) `kp:CalendarDate` | entity | approved | A single calendar day, used as the temporal anchor for transactions and reporting periods. | — |
+| [Currency Exchange Rate](./finance/currency-exchange-rate.md) `kp:CurrencyExchangeRate` | entity | approved | The daily rate for converting an amount from one currency into a reporting currency. | — |
+| [Customer](./sales/customer.md) `kp:Customer` | entity | approved | A natural or legal person who buys products from the company. | — |
+| [Order](./sales/order.md) `kp:Order` | entity | approved | A purchase transaction placed by a customer at a store on a given date, composed of one or more order lines. | — |
+| [Order Line](./sales/order-line.md) `kp:OrderLine` | entity | approved | A single line on an order, recording one product, its quantity and the prices applied at sale time. | — |
+| [Product](./merchandising/product.md) `kp:Product` | entity | approved | A sellable item offered to customers, identified by a stable product key. | — |
+| [Store](./operations/store.md) `kp:Store` | entity | approved | A physical or online point of sale where orders are placed. | — |
+| [Active Customer](./sales/active-customer.md) `kp:ActiveCustomer` | defined_class | approved | A customer with at least one order in the last 2 years. | — |
+| [Active Store Count](./operations/active-store-count.md) `kp:ActiveStoreCount` | measure | approved | Number of stores in scope that are not closed. | — |
+| [Average Exchange Rate](./finance/average-exchange-rate.md) `kp:AverageExchangeRate` | measure | approved | Average currency exchange rate applied to convert order lines into the reporting currency. | — |
+| [Average Order Value](./sales/average-order-value.md) `kp:AverageOrderValue` | measure | approved | Average revenue per order: total sales divided by order count. | — |
+| [Average Selling Price](./finance/average-selling-price.md) `kp:AverageSellingPrice` | measure | approved | Net sales divided by units sold; the average realized price per unit. (ASP) | — |
+| [Average Delivery Days](./operations/avg-delivery-days.md) `kp:AvgDeliveryDays` | measure | approved | Average number of days between order date and delivery date across orders in scope. | — |
+| [Delivered Within 3 Days Rate](./operations/delivered-within3-days-rate.md) `kp:DeliveredWithin3DaysRate` | measure | approved | Share of orders in scope delivered within three days of the order date. | — |
+| [Discount Amount](./finance/discount-amount.md) `kp:DiscountAmount` | measure | approved | Total discount given: gross (list) revenue minus net sales, in the reporting currency. | — |
+| [Discount Rate](./finance/discount-rate.md) `kp:DiscountRate` | measure | approved | Discount amount as a share of gross (list) revenue. | — |
+| [Distinct Products Sold](./merchandising/distinct-products-sold.md) `kp:DistinctProductsSold` | measure | approved | Number of distinct products that appear on at least one order line in scope. | — |
+| [Gross Revenue](./finance/gross-revenue.md) `kp:GrossRevenue` | measure | approved | Total revenue valued at list price, before discounts, in the reporting currency. | — |
+| [Line Cost](./core/line-cost.md) `kp:LineCost` | measure | approved | Cost of goods sold for one order line: quantity times unit cost. | — |
+| [Line Count](./operations/line-count.md) `kp:LineCount` | measure | approved | Number of order lines in scope. | — |
+| [Line Discount](./core/line-discount.md) `kp:LineDiscount` | measure | approved | Discount given on one order line: quantity times (list price minus net price). | — |
+| [Line List Revenue](./core/line-list-revenue.md) `kp:LineListRevenue` | measure | approved | Revenue for one order line valued at list price (before discount): quantity times unit list price. | — |
+| [Line Revenue](./core/line-revenue.md) `kp:LineRevenue` | measure | approved | Gross revenue for one order line: quantity times net price. | — |
+| [List Price Margin Percent](./merchandising/list-price-margin-percent.md) `kp:ListPriceMarginPercent` | measure | approved | Average catalog margin of products: (list price minus unit cost) divided by list price. | — |
+| [Margin](./core/margin.md) `kp:Margin` | measure | approved | Gross margin: total sales minus total cost. | — |
+| [Margin Percent](./core/margin-percent.md) `kp:MarginPercent` | measure | approved | Gross margin expressed as a ratio of total sales. | — |
+| [Markup Percent](./finance/markup-percent.md) `kp:MarkupPercent` | measure | approved | Gross margin expressed as a share of cost of goods sold: margin divided by total cost. | — |
+| [Order Count](./core/order-count.md) `kp:OrderCount` | measure | approved | Number of distinct orders in scope. | — |
+| [Sales Per Square Meter](./operations/sales-per-square-meter.md) `kp:SalesPerSquareMeter` | measure | approved | Total sales divided by total store selling area, a retail productivity measure. | — |
+| [Store Count](./operations/store-count.md) `kp:StoreCount` | measure | approved | Number of distinct stores in scope. | — |
+| [Total Cost](./core/total-cost.md) `kp:TotalCost` | measure | approved | Sum of line cost across all order lines in scope. | — |
+| [Total Sales](./core/total-sales.md) `kp:TotalSales` | measure | approved | Sum of line revenue across all order lines in scope. | — |
+| [Total Units](./operations/total-units.md) `kp:TotalUnits` | measure | approved | Total number of product units sold across all order lines in scope. | — |
+| [Units Per Order](./operations/units-per-order.md) `kp:UnitsPerOrder` | measure | approved | Average number of product units per order: total units divided by order count. | — |
+| [Customer Age](./core/customer-age.md) `kp:CustomerAge` | attribute | approved | Age of the customer in years. | — |
+| [Customer City](./core/customer-city.md) `kp:CustomerCity` | attribute | approved | City of residence of the customer. | — |
+| [Customer Country](./core/customer-country.md) `kp:CustomerCountry` | attribute | approved | Country of residence of the customer. | — |
+| [Customer Gender](./core/customer-gender.md) `kp:CustomerGender` | attribute | approved | Gender of the customer. | — |
+| [Customer Occupation](./core/customer-occupation.md) `kp:CustomerOccupation` | attribute | approved | Stated occupation of the customer. | — |
+| [Delivery Days](./operations/delivery-days.md) `kp:DeliveryDays` | attribute | approved | Number of days between the order date and the delivery date for an order. | — |
+| [Line Quantity](./core/line-quantity.md) `kp:LineQuantity` | attribute | approved | Number of product units on the order line. | — |
+| [Order Currency](./finance/order-currency.md) `kp:OrderCurrency` | attribute | approved | The original transaction currency in which an order was placed. | — |
+| [Order Date](./core/order-date.md) `kp:OrderDate` | attribute | approved | The calendar date on which the order was placed. | — |
+| [Product Brand](./core/product-brand.md) `kp:ProductBrand` | attribute | approved | Brand under which the product is sold. | — |
+| [Product Category](./core/product-category.md) `kp:ProductCategory` | attribute | approved | Top-level merchandising category of the product. | — |
+| [Product Color](./merchandising/product-color.md) `kp:ProductColor` | attribute | approved | Color the product is sold in. | — |
+| [Product Manufacturer](./merchandising/product-manufacturer.md) `kp:ProductManufacturer` | attribute | approved | Manufacturer that produces the product. | — |
+| [Product Sub-Category](./merchandising/product-sub-category.md) `kp:ProductSubCategory` | attribute | approved | Merchandising sub-category of the product, below its top-level category. | — |
+| [Product Unit Cost](./core/product-unit-cost.md) `kp:ProductUnitCost` | attribute | approved | Cost to the company of one unit of the product. | — |
+| [Product Unit Price](./core/product-unit-price.md) `kp:ProductUnitPrice` | attribute | approved | List selling price of one unit of the product. | — |
+| [Sales Channel](./operations/sales-channel.md) `kp:SalesChannel` | attribute | approved | The channel through which an order was placed: Online or Physical store. | — |
+| [Store Country](./core/store-country.md) `kp:StoreCountry` | attribute | approved | Country in which the store operates. | — |
+| [Store Open Date](./operations/store-open-date.md) `kp:StoreOpenDate` | attribute | approved | The date on which a store opened for business. | — |
+| [Store Square Meters](./operations/store-square-meters.md) `kp:StoreSquareMeters` | attribute | approved | Selling floor area of a store, in square meters. | — |
+| [Store Status](./operations/store-status.md) `kp:StoreStatus` | attribute | approved | Operating status of a store, e.g. open or closed. | — |
 
 Domains: [core](./core/index.md) · [finance](./finance/index.md) · [merchandising](./merchandising/index.md) · [operations](./operations/index.md) · [sales](./sales/index.md)
 

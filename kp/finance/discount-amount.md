@@ -18,9 +18,5 @@ Total discount given: gross (list) revenue minus net sales, in the reporting cur
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| finance | `finance_order` | `discount_amount` |
-
-Measured on [Order](../sales/order.md).
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

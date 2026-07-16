@@ -15,9 +15,5 @@ Gross revenue for one order line: quantity times net price.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| base | `order_line_in_context` | `line_revenue` |
-
-Measured on [Order Line](../sales/order-line.md).
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

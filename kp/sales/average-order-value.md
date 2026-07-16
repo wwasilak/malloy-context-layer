@@ -18,9 +18,5 @@ Average revenue per order: total sales divided by order count.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| sales | `sales_performance` | `average_order_value` |
-
-Measured on [Order](order.md).
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

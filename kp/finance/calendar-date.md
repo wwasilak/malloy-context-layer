@@ -17,7 +17,5 @@ A single calendar day, used as the temporal anchor for transactions and reportin
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| base | `calendar_date` | *(source)* |
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

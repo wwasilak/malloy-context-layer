@@ -20,7 +20,5 @@ Attribute of [Order](../sales/order.md).
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| finance | `finance_order` | `order_currency` |
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

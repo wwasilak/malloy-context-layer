@@ -17,9 +17,5 @@ Average number of days between order date and delivery date across orders in sco
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| operations | `operations_order` | `avg_delivery_days` |
-
-Measured on [Order](../sales/order.md).
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

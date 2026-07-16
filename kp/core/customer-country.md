@@ -18,8 +18,5 @@ Attribute of [Customer](../sales/customer.md).
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| base | `customer_order_in_context` | `Country` |
-| base | `customer` | `Country` |
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

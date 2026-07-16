@@ -19,10 +19,5 @@ A natural or legal person who buys products from the company.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| base | `customer` | *(source)* |
-| base | `customer_order_in_context` | *(source)* |
-
-**Preferred source:** `base.customer_order_in_context`
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

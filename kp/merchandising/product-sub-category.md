@@ -20,7 +20,5 @@ Attribute of [Product](product.md).
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| merchandising | `product_performance` | `sub_category` |
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->

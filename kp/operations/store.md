@@ -17,8 +17,5 @@ A physical or online point of sale where orders are placed.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| base | `store` | *(source)* |
-| operations | `store_portfolio` | *(source)* |
+_Not yet generated — run `node build.js`._
 <!-- END GENERATED -->
