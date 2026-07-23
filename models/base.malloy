@@ -1,5 +1,12 @@
 ##! experimental.access_modifiers experimental.parameters
 
+##! experimental.givens
+
+given:
+  TENANT :: string
+  MAX_ROWS :: number is 1000
+  CUTOFF_DATE :: date is @2024-01-01
+
 // =============================================================================
 // BASE MODEL — shared data plane + core semantics for ALL departments.
 // Department models (sales, operations, finance, merchandising) `import` this
