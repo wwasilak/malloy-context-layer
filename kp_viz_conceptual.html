@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OKF Bundle Viewer</title>
+<script src="https://cdn.jsdelivr.net/npm/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  color: #0f172a;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}
+.title strong { font-size: 16px; margin-right: 8px; }
+.muted { color: #64748b; font-size: 12px; }
+.controls { display: flex; gap: 8px; }
+.controls input, .controls select, .controls button {
+  font-size: 13px;
+  padding: 5px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #fff;
+}
+.controls input { width: 220px; }
+.controls button { cursor: pointer; background: #f1f5f9; }
+.controls button:hover { background: #e2e8f0; }
+
+main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+#graph {
+  flex: 1 1 60%;
+  background: #fff;
+  border-right: 1px solid #e2e8f0;
+  min-width: 0;
+  position: relative;
+}
+#detail {
+  flex: 0 0 40%;
+  overflow-y: auto;
+  padding: 18px 22px;
+  background: #fff;
+}
+#detail-empty {
+  text-align: center;
+  margin-top: 40px;
+}
+
+.detail-header { margin-bottom: 12px; }
+.detail-header h1 {
+  font-size: 18px;
+  margin: 4px 0 2px;
+  font-weight: 600;
+}
+.type-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+dl.frontmatter {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  row-gap: 4px;
+  column-gap: 12px;
+  margin: 8px 0 12px;
+  font-size: 13px;
+}
+dl.frontmatter dt {
+  color: #64748b;
+  font-weight: 500;
+}
+dl.frontmatter dd { margin: 0; }
+dl.frontmatter a { color: #2563eb; word-break: break-all; }
+
+.tag {
+  display: inline-block;
+  padding: 1px 6px;
+  margin: 0 4px 2px 0;
+  border-radius: 4px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 11px;
+}
+
+hr { border: none; border-top: 1px solid #e2e8f0; margin: 14px 0; }
+
+#detail-body { font-size: 13px; line-height: 1.55; }
+#detail-body h1 {
+  font-size: 16px; margin: 18px 0 6px;
+  padding-bottom: 4px; border-bottom: 1px solid #e2e8f0;
+}
+#detail-body h2 { font-size: 14px; margin: 14px 0 4px; }
+#detail-body h3 { font-size: 13px; margin: 12px 0 4px; }
+#detail-body p { margin: 6px 0; }
+#detail-body code {
+  background: #f1f5f9;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+}
+#detail-body pre {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 12px;
+}
+#detail-body pre code { background: transparent; color: inherit; padding: 0; }
+#detail-body ul, #detail-body ol { padding-left: 22px; margin: 6px 0; }
+#detail-body li { margin: 2px 0; }
+#detail-body table { border-collapse: collapse; margin: 8px 0; }
+#detail-body th, #detail-body td {
+  border: 1px solid #e2e8f0; padding: 4px 8px; font-size: 12px;
+}
+#detail-body a.internal { color: #2563eb; cursor: pointer; }
+#detail-body a.external { color: #2563eb; }
+
+#detail-backlinks { margin-top: 18px; }
+#detail-backlinks h2 { font-size: 13px; color: #64748b; margin-bottom: 6px; }
+#detail-backlinks ul { padding-left: 18px; }
+#detail-backlinks a { color: #2563eb; cursor: pointer; }
+
+</style>
+</head>
+<body>
+<header>
+  <div class="title">
+    <strong id="bundle-name"></strong>
+    <span class="muted">OKF bundle</span>
+  </div>
+  <div class="controls">
+    <input id="search" type="search" placeholder="Search title / id / tag">
+    <select id="filter-type">
+      <option value="">All types</option>
+    </select>
+    <select id="layout">
+      <option value="cose">cose (force)</option>
+      <option value="concentric">concentric</option>
+      <option value="breadthfirst">breadth-first</option>
+      <option value="circle">circle</option>
+      <option value="grid">grid</option>
+    </select>
+    <button id="reset">Reset view</button>
+  </div>
+</header>
+
+<main>
+  <section id="graph"></section>
+  <section id="detail">
+    <div id="detail-empty" class="muted">Click a node to see its details.</div>
+    <article id="detail-content" hidden>
+      <header class="detail-header">
+        <span class="type-chip" id="detail-type"></span>
+        <h1 id="detail-title"></h1>
+        <div class="muted" id="detail-id"></div>
+      </header>
+      <dl class="frontmatter">
+        <dt>Description</dt><dd id="detail-description"></dd>
+        <dt>Resource</dt><dd id="detail-resource"></dd>
+        <dt>Tags</dt><dd id="detail-tags"></dd>
+      </dl>
+      <hr>
+      <div id="detail-body"></div>
+      <section id="detail-backlinks" hidden>
+        <h2>Cited by</h2>
+        <ul id="backlinks-list"></ul>
+      </section>
+    </article>
+  </section>
+</main>
+
+<script>
+window.BUNDLE_NAME = "Knowledge Plane";
+window.BUNDLE = {"nodes": [{"data": {"id": "core/customer-age", "label": "Customer Age", "type": "attribute", "description": "Age of the customer in years.", "resource": "", "tags": ["core", "approved"], "color": "#f59e0b", "size": 31}}, {"data": {"id": "core/customer-city", "label": "Customer City", "type": "attribute", "description": "City of residence of the customer.", "resource": "", "tags": ["core", "approved"], "color": "#f59e0b", "size": 31}}, {"data": {"id": "core/customer-country", "label": "Customer Country", "type": "attribute", "description": "Country of residence of the customer.", "resource": "", "tags": ["core", "approved"], "color": "#f59e0b", "size": 31}}, {"data": {"id": "core/customer-gender", "label": "Customer Gender", "type": "attribute", "description": "Gender of the customer.", "resource": "", "tags": ["core", "approved"], "color": "#f59e0b", "size": 31}}, {"data": {"id": "core/customer-occupation", "label": "Customer Occupation", "type": "attribute", "description": "Stated occupation of the customer.", "resource": "", "tags": ["core", "approved"], "color": "#f59e0b", "size": 31}}, {"data": {"id": "core/line-quantity", "label": "Line Quantity", "type": "attribute", "description": "Number of product units on the order line.", "resource": "", "tags": ["core", "approved"], "color": "#f59e0b", "size": 31}}, {"data": {"id": "core/order-date", "label": "Order Date", "type": "attribute", "description": "The calendar date on which the order was placed.", "resource": "", "tags": ["core", "approved"], "color": "#f59e0b", "size": 31}}, {"data": {"id": "core/product-brand", "label": "Product Brand", "type": "attribute", "description": "Brand under which the product is sold.", "resource": "", "tags": ["core", "approved"], "color": "#f59e0b", "size": 31}}, {"data": {"id": "core/product-category", "label": "Product Category", "type": "attribute", "description": "Top-level merchandising category of the product.", "resource": "", "tags": ["core", "approved"], "color": "#f59e0b", "size": 31}}, {"data": {"id": "core/product-unit-cost", "label": "Product Unit Cost", "type": "attribute", "description": "Cost to the company of one unit of the product.", "resource": "", "tags": ["core", "approved"], "color": "#f59e0b", "size": 31}}, {"data": {"id": "core/product-unit-price", "label": "Product Unit Price", "type": "attribute", "description": "List selling price of one unit of the product.", "resource": "", "tags": ["core", "approved"], "color": "#f59e0b", "size": 31}}, {"data": {"id": "core/store-country", "label": "Store Country", "type": "attribute", "description": "Country in which the store operates.", "resource": "", "tags": ["core", "approved"], "color": "#f59e0b", "size": 31}}, {"data": {"id": "finance/calendar-date", "label": "Calendar Date", "type": "entity", "description": "A single calendar day, used as the temporal anchor for transactions and reporting periods.", "resource": "", "tags": ["Finance", "approved"], "color": "#3b82f6", "size": 31}}, {"data": {"id": "finance/currency-exchange-rate", "label": "Currency Exchange Rate", "type": "entity", "description": "The daily rate for converting an amount from one currency into a reporting currency.", "resource": "", "tags": ["Finance", "approved"], "color": "#3b82f6", "size": 31}}, {"data": {"id": "finance/order-currency", "label": "Order Currency", "type": "attribute", "description": "The original transaction currency in which an order was placed.", "resource": "", "tags": ["Finance", "approved"], "color": "#f59e0b", "size": 31}}, {"data": {"id": "merchandising/product-color", "label": "Product Color", "type": "attribute", "description": "Color the product is sold in.", "resource": "", "tags": ["Merchandising", "approved"], "color": "#f59e0b", "size": 31}}, {"data": {"id": "merchandising/product-manufacturer", "label": "Product Manufacturer", "type": "attribute", "description": "Manufacturer that produces the product.", "resource": "", "tags": ["Merchandising", "approved"], "color": "#f59e0b", "size": 31}}, {"data": {"id": "merchandising/product-sub-category", "label": "Product Sub-Category", "type": "attribute", "description": "Merchandising sub-category of the product, below its top-level category.", "resource": "", "tags": ["Merchandising", "approved"], "color": "#f59e0b", "size": 31}}, {"data": {"id": "merchandising/product", "label": "Product", "type": "entity", "description": "A sellable item offered to customers, identified by a stable product key.", "resource": "", "tags": ["Merchandising", "approved"], "color": "#3b82f6", "size": 31}}, {"data": {"id": "operations/delivery-days", "label": "Delivery Days", "type": "attribute", "description": "Number of days between the order date and the delivery date for an order.", "resource": "", "tags": ["Retail Operations", "approved"], "color": "#f59e0b", "size": 31}}, {"data": {"id": "operations/sales-channel", "label": "Sales Channel", "type": "attribute", "description": "The channel through which an order was placed: Online or Physical store.", "resource": "", "tags": ["Retail Operations", "approved"], "color": "#f59e0b", "size": 31}}, {"data": {"id": "operations/store-open-date", "label": "Store Open Date", "type": "attribute", "description": "The date on which a store opened for business.", "resource": "", "tags": ["Retail Operations", "approved"], "color": "#f59e0b", "size": 31}}, {"data": {"id": "operations/store-square-meters", "label": "Store Square Meters", "type": "attribute", "description": "Selling floor area of a store, in square meters.", "resource": "", "tags": ["Retail Operations", "approved"], "color": "#f59e0b", "size": 31}}, {"data": {"id": "operations/store-status", "label": "Store Status", "type": "attribute", "description": "Operating status of a store, e.g. open or closed.", "resource": "", "tags": ["Retail Operations", "approved"], "color": "#f59e0b", "size": 31}}, {"data": {"id": "operations/store", "label": "Store", "type": "entity", "description": "A physical or online point of sale where orders are placed.", "resource": "", "tags": ["Retail Operations", "approved"], "color": "#3b82f6", "size": 31}}, {"data": {"id": "sales/active-customer", "label": "Active Customer", "type": "defined_class", "description": "A customer with at least one order in the last 2 years.", "resource": "", "tags": ["Sales", "approved"], "color": "#8b5cf6", "size": 32}}, {"data": {"id": "sales/customer", "label": "Customer", "type": "entity", "description": "A natural or legal person who buys products from the company.", "resource": "", "tags": ["Sales", "approved"], "color": "#3b82f6", "size": 31}}, {"data": {"id": "sales/order-line", "label": "Order Line", "type": "entity", "description": "A single line on an order, recording one product, its quantity and the prices applied at sale time.", "resource": "", "tags": ["Sales", "approved"], "color": "#3b82f6", "size": 33}}, {"data": {"id": "sales/order", "label": "Order", "type": "entity", "description": "A purchase transaction placed by a customer at a store on a given date, composed of one or more order lines.", "resource": "", "tags": ["Sales", "approved"], "color": "#3b82f6", "size": 34}}], "edges": [{"data": {"id": "core/customer-age__sales/customer", "source": "core/customer-age", "target": "sales/customer"}}, {"data": {"id": "core/customer-city__sales/customer", "source": "core/customer-city", "target": "sales/customer"}}, {"data": {"id": "core/customer-country__sales/customer", "source": "core/customer-country", "target": "sales/customer"}}, {"data": {"id": "core/customer-gender__sales/customer", "source": "core/customer-gender", "target": "sales/customer"}}, {"data": {"id": "core/customer-occupation__sales/customer", "source": "core/customer-occupation", "target": "sales/customer"}}, {"data": {"id": "core/line-quantity__sales/order-line", "source": "core/line-quantity", "target": "sales/order-line"}}, {"data": {"id": "core/order-date__sales/order", "source": "core/order-date", "target": "sales/order"}}, {"data": {"id": "core/product-brand__merchandising/product", "source": "core/product-brand", "target": "merchandising/product"}}, {"data": {"id": "core/product-category__merchandising/product", "source": "core/product-category", "target": "merchandising/product"}}, {"data": {"id": "core/product-unit-cost__merchandising/product", "source": "core/product-unit-cost", "target": "merchandising/product"}}, {"data": {"id": "core/product-unit-price__merchandising/product", "source": "core/product-unit-price", "target": "merchandising/product"}}, {"data": {"id": "core/store-country__operations/store", "source": "core/store-country", "target": "operations/store"}}, {"data": {"id": "finance/order-currency__sales/order", "source": "finance/order-currency", "target": "sales/order"}}, {"data": {"id": "merchandising/product-color__merchandising/product", "source": "merchandising/product-color", "target": "merchandising/product"}}, {"data": {"id": "merchandising/product-manufacturer__merchandising/product", "source": "merchandising/product-manufacturer", "target": "merchandising/product"}}, {"data": {"id": "merchandising/product-sub-category__merchandising/product", "source": "merchandising/product-sub-category", "target": "merchandising/product"}}, {"data": {"id": "operations/delivery-days__sales/order", "source": "operations/delivery-days", "target": "sales/order"}}, {"data": {"id": "operations/sales-channel__sales/order", "source": "operations/sales-channel", "target": "sales/order"}}, {"data": {"id": "operations/store-open-date__operations/store", "source": "operations/store-open-date", "target": "operations/store"}}, {"data": {"id": "operations/store-square-meters__operations/store", "source": "operations/store-square-meters", "target": "operations/store"}}, {"data": {"id": "operations/store-status__operations/store", "source": "operations/store-status", "target": "operations/store"}}, {"data": {"id": "sales/active-customer__sales/customer", "source": "sales/active-customer", "target": "sales/customer"}}, {"data": {"id": "sales/order-line__finance/currency-exchange-rate", "source": "sales/order-line", "target": "finance/currency-exchange-rate"}}, {"data": {"id": "sales/order-line__merchandising/product", "source": "sales/order-line", "target": "merchandising/product"}}, {"data": {"id": "sales/order__sales/order-line", "source": "sales/order", "target": "sales/order-line"}}, {"data": {"id": "sales/order__operations/store", "source": "sales/order", "target": "operations/store"}}, {"data": {"id": "sales/order__sales/customer", "source": "sales/order", "target": "sales/customer"}}, {"data": {"id": "sales/order__finance/calendar-date", "source": "sales/order", "target": "finance/calendar-date"}}], "bodies": {"core/customer-age": "# Customer Age\n\nAge of the customer in years.\n\nAttribute of [Customer](../sales/customer.md).\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| base | `customer_order_in_context` | `Age` |\n| base | `customer` | `Age` |\n<!-- END GENERATED -->", "core/customer-city": "# Customer City\n\nCity of residence of the customer.\n\nAttribute of [Customer](../sales/customer.md).\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| base | `customer_order_in_context` | `City` |\n| base | `customer` | `City` |\n<!-- END GENERATED -->", "core/customer-country": "# Customer Country\n\nCountry of residence of the customer.\n\nAttribute of [Customer](../sales/customer.md).\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| base | `customer_order_in_context` | `Country` |\n| base | `customer` | `Country` |\n<!-- END GENERATED -->", "core/customer-gender": "# Customer Gender\n\nGender of the customer.\n\nAttribute of [Customer](../sales/customer.md).\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| base | `customer_order_in_context` | `Gender` |\n| base | `customer` | `Gender` |\n<!-- END GENERATED -->", "core/customer-occupation": "# Customer Occupation\n\nStated occupation of the customer.\n\nAttribute of [Customer](../sales/customer.md).\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| base | `customer_order_in_context` | `Occupation` |\n| base | `customer` | `Occupation` |\n<!-- END GENERATED -->", "core/line-quantity": "# Line Quantity\n\nNumber of product units on the order line.\n\nAttribute of [Order Line](../sales/order-line.md).\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| base | `order_line_in_context` | `Quantity` |\n| base | `order_line` | `Quantity` |\n<!-- END GENERATED -->", "core/order-date": "# Order Date\n\nThe calendar date on which the order was placed.\n\nAttribute of [Order](../sales/order.md).\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| base | `order` | `DT` |\n| base | `sales_order` | `DT` |\n<!-- END GENERATED -->", "core/product-brand": "# Product Brand\n\nBrand under which the product is sold.\n\nAttribute of [Product](../merchandising/product.md).\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| base | `product` | `Brand` |\n<!-- END GENERATED -->", "core/product-category": "# Product Category\n\nTop-level merchandising category of the product.\n\nAttribute of [Product](../merchandising/product.md).\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| base | `product` | `CategoryName` |\n<!-- END GENERATED -->", "core/product-unit-cost": "# Product Unit Cost\n\nCost to the company of one unit of the product.\n\nAttribute of [Product](../merchandising/product.md).\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| base | `product` | `Cost` |\n<!-- END GENERATED -->", "core/product-unit-price": "# Product Unit Price\n\nList selling price of one unit of the product.\n\nAttribute of [Product](../merchandising/product.md).\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| base | `product` | `Price` |\n<!-- END GENERATED -->", "core/store-country": "# Store Country\n\nCountry in which the store operates.\n\nAttribute of [Store](../operations/store.md).\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| base | `store` | `CountryName` |\n<!-- END GENERATED -->", "finance/calendar-date": "# Calendar Date\n\nA single calendar day, used as the temporal anchor for transactions and reporting periods.\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| base | `calendar_date` | *(source)* |\n<!-- END GENERATED -->", "finance/currency-exchange-rate": "# Currency Exchange Rate\n\nThe daily rate for converting an amount from one currency into a reporting currency.\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| base | `currency_exchange_rate` | *(source)* |\n<!-- END GENERATED -->", "finance/order-currency": "# Order Currency\n\nThe original transaction currency in which an order was placed.\n\nAttribute of [Order](../sales/order.md).\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| finance | `finance_order` | `order_currency` |\n<!-- END GENERATED -->", "merchandising/product-color": "# Product Color\n\nColor the product is sold in.\n\nAttribute of [Product](product.md).\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| merchandising | `product_performance` | `color` |\n<!-- END GENERATED -->", "merchandising/product-manufacturer": "# Product Manufacturer\n\nManufacturer that produces the product.\n\nAttribute of [Product](product.md).\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| merchandising | `product_performance` | `manufacturer` |\n<!-- END GENERATED -->", "merchandising/product-sub-category": "# Product Sub-Category\n\nMerchandising sub-category of the product, below its top-level category.\n\nAttribute of [Product](product.md).\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| merchandising | `product_performance` | `sub_category` |\n<!-- END GENERATED -->", "merchandising/product": "# Product\n\nA sellable item offered to customers, identified by a stable product key.\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| base | `product` | *(source)* |\n| merchandising | `product_performance` | *(source)* |\n<!-- END GENERATED -->", "operations/delivery-days": "# Delivery Days\n\nNumber of days between the order date and the delivery date for an order.\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| operations | `operations_order` | `delivery_days` |\n\nMeasured on [Order](../sales/order.md).\n<!-- END GENERATED -->", "operations/sales-channel": "# Sales Channel\n\nThe channel through which an order was placed: Online or Physical store.\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| base | `sales_order` | `channel` |\n\nMeasured on [Order](../sales/order.md).\n<!-- END GENERATED -->", "operations/store-open-date": "# Store Open Date\n\nThe date on which a store opened for business.\n\nAttribute of [Store](store.md).\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| operations | `store_portfolio` | `store_open_date` |\n<!-- END GENERATED -->", "operations/store-square-meters": "# Store Square Meters\n\nSelling floor area of a store, in square meters.\n\nAttribute of [Store](store.md).\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| operations | `store_portfolio` | `square_meters` |\n<!-- END GENERATED -->", "operations/store-status": "# Store Status\n\nOperating status of a store, e.g. open or closed.\n\nAttribute of [Store](store.md).\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| operations | `store_portfolio` | `store_status` |\n<!-- END GENERATED -->", "operations/store": "# Store\n\nA physical or online point of sale where orders are placed.\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| base | `store` | *(source)* |\n| operations | `store_portfolio` | *(source)* |\n<!-- END GENERATED -->", "sales/active-customer": "# Active Customer\n\nA customer with at least one order in the last 2 years.\n\n## Membership rule\n\n`made_an_order count > 0 within last 2 years`\n\nApply this rule **verbatim** when querying; never improvise an equivalent filter.\n\nSubtype of [Customer](customer.md).\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| base | `customer_order_in_context` | `is_active_customer` |\n<!-- END GENERATED -->", "sales/customer": "# Customer\n\nA natural or legal person who buys products from the company.\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| base | `customer` | *(source)* |\n| base | `customer_order_in_context` | *(source)* |\n\n**Preferred source:** `base.customer_order_in_context`\n<!-- END GENERATED -->", "sales/order-line": "# Order Line\n\nA single line on an order, recording one product, its quantity and the prices applied at sale time.\n\n## Relationships\n\n- *is converted via* \u2192 [Currency Exchange Rate](../finance/currency-exchange-rate.md) (`kp:isConvertedVia`)\n- *records sale of* \u2192 [Product](../merchandising/product.md) (`kp:recordsSaleOf`)\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| base | `order_line` | *(source)* |\n| base | `order_line_in_context` | *(source)* |\n| merchandising | `product_line` | *(source)* |\n\n**Preferred source:** `base.order_line_in_context`\n<!-- END GENERATED -->", "sales/order": "# Order\n\nA purchase transaction placed by a customer at a store on a given date, composed of one or more order lines.\n\n## Relationships\n\n- *consists of* \u2192 [Order Line](order-line.md) (`kp:consistsOf`)\n- *is placed at* \u2192 [Store](../operations/store.md) (`kp:isPlacedAt`)\n- *is placed by* \u2192 [Customer](customer.md) (`kp:isPlacedBy`)\n- *occurs on* \u2192 [Calendar Date](../finance/calendar-date.md) (`kp:occursOn`)\n\n## Implementations\n\n<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->\n| Model | Source | Field |\n|---|---|---|\n| base | `customer_order_in_context` | `made_an_order` |\n| base | `order` | *(source)* |\n| base | `order_line_in_context` | `of_order` |\n| base | `sales_order` | *(source)* |\n| finance | `finance_order` | *(source)* |\n| operations | `operations_order` | *(source)* |\n| sales | `sales_performance` | *(source)* |\n\n**Preferred source:** `base.sales_order`\n<!-- END GENERATED -->"}, "types": ["attribute", "defined_class", "entity"], "palette": {"entity": "#3b82f6", "defined_class": "#8b5cf6", "measure": "#10b981", "attribute": "#f59e0b"}};
+</script>
+<script>
+(function () {
+  const bundle = window.BUNDLE;
+  const bundleName = window.BUNDLE_NAME;
+  document.title = `${bundleName} — OKF Viewer`;
+  document.getElementById("bundle-name").textContent = bundleName;
+
+  // Populate type filter
+  const typeSelect = document.getElementById("filter-type");
+  for (const t of bundle.types) {
+    const opt = document.createElement("option");
+    opt.value = t;
+    opt.textContent = t;
+    typeSelect.appendChild(opt);
+  }
+
+  // Build reverse-link index for backlinks
+  const backlinks = {};
+  for (const edge of bundle.edges) {
+    const { source, target } = edge.data;
+    (backlinks[target] ||= []).push(source);
+  }
+
+  // Look up node label/type by id
+  const nodeIndex = {};
+  for (const n of bundle.nodes) nodeIndex[n.data.id] = n.data;
+
+  const cy = cytoscape({
+    container: document.getElementById("graph"),
+    elements: [...bundle.nodes, ...bundle.edges],
+    style: [
+      {
+        selector: "node",
+        style: {
+          "background-color": "data(color)",
+          "label": "data(label)",
+          "color": "#0f172a",
+          "font-size": 11,
+          "text-valign": "bottom",
+          "text-margin-y": 4,
+          "text-wrap": "wrap",
+          "text-max-width": 120,
+          "width": "data(size)",
+          "height": "data(size)",
+          "border-width": 1,
+          "border-color": "#0f172a",
+        },
+      },
+      {
+        selector: "node:selected",
+        style: {
+          "border-width": 3,
+          "border-color": "#f59e0b",
+        },
+      },
+      {
+        selector: "edge",
+        style: {
+          "width": 1.5,
+          "line-color": "#cbd5e1",
+          "target-arrow-color": "#cbd5e1",
+          "target-arrow-shape": "triangle",
+          "curve-style": "bezier",
+          "arrow-scale": 0.9,
+        },
+      },
+      {
+        selector: "edge:selected",
+        style: {
+          "line-color": "#f59e0b",
+          "target-arrow-color": "#f59e0b",
+          "width": 2.5,
+        },
+      },
+      {
+        selector: ".dim",
+        style: { "opacity": 0.15 },
+      },
+    ],
+    layout: { name: "cose", animate: false, padding: 30 },
+    wheelSensitivity: 0.2,
+  });
+
+  cy.on("tap", "node", (evt) => showDetail(evt.target.id()));
+  cy.on("tap", (evt) => {
+    if (evt.target === cy) clearSelection();
+  });
+
+  document.getElementById("layout").addEventListener("change", (e) => {
+    cy.layout({ name: e.target.value, animate: false, padding: 30 }).run();
+  });
+
+  document.getElementById("reset").addEventListener("click", () => {
+    cy.fit(null, 30);
+    clearSelection();
+  });
+
+  document.getElementById("search").addEventListener("input", (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    if (!q) {
+      cy.elements().removeClass("dim");
+      return;
+    }
+    cy.nodes().forEach((n) => {
+      const d = n.data();
+      const hay =
+        (d.label || "").toLowerCase() + " " +
+        d.id.toLowerCase() + " " +
+        (d.tags || []).join(" ").toLowerCase();
+      n.toggleClass("dim", !hay.includes(q));
+    });
+    cy.edges().forEach((edge) => {
+      const src = edge.source();
+      const tgt = edge.target();
+      edge.toggleClass("dim", src.hasClass("dim") || tgt.hasClass("dim"));
+    });
+  });
+
+  document.getElementById("filter-type").addEventListener("change", (e) => {
+    const t = e.target.value;
+    if (!t) {
+      cy.elements().removeClass("dim");
+      return;
+    }
+    cy.nodes().forEach((n) => {
+      n.toggleClass("dim", n.data("type") !== t);
+    });
+    cy.edges().forEach((edge) => {
+      edge.toggleClass("dim", edge.source().hasClass("dim") || edge.target().hasClass("dim"));
+    });
+  });
+
+  function clearSelection() {
+    cy.elements().unselect();
+    document.getElementById("detail-empty").hidden = false;
+    document.getElementById("detail-content").hidden = true;
+  }
+
+  function showDetail(conceptId) {
+    const data = nodeIndex[conceptId];
+    if (!data) return;
+    cy.elements().unselect();
+    const node = cy.getElementById(conceptId);
+    if (node) node.select();
+
+    document.getElementById("detail-empty").hidden = true;
+    const content = document.getElementById("detail-content");
+    content.hidden = false;
+
+    const chip = document.getElementById("detail-type");
+    chip.textContent = data.type;
+    chip.style.background = data.color;
+
+    document.getElementById("detail-title").textContent = data.label;
+    document.getElementById("detail-id").textContent = conceptId;
+    document.getElementById("detail-description").textContent = data.description || "—";
+
+    const resourceEl = document.getElementById("detail-resource");
+    resourceEl.innerHTML = "";
+    if (data.resource) {
+      const a = document.createElement("a");
+      a.href = data.resource;
+      a.textContent = data.resource;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.className = "external";
+      resourceEl.appendChild(a);
+    } else {
+      resourceEl.textContent = "—";
+    }
+
+    const tagsEl = document.getElementById("detail-tags");
+    tagsEl.innerHTML = "";
+    if (data.tags && data.tags.length) {
+      for (const t of data.tags) {
+        const span = document.createElement("span");
+        span.className = "tag";
+        span.textContent = t;
+        tagsEl.appendChild(span);
+      }
+    } else {
+      tagsEl.textContent = "—";
+    }
+
+    const body = bundle.bodies[conceptId] || "";
+    const html = marked.parse(body, { breaks: false, gfm: true });
+    const bodyEl = document.getElementById("detail-body");
+    bodyEl.innerHTML = html;
+    rewriteInternalLinks(bodyEl);
+
+    const bl = backlinks[conceptId] || [];
+    const blSection = document.getElementById("detail-backlinks");
+    const blList = document.getElementById("backlinks-list");
+    blList.innerHTML = "";
+    if (bl.length) {
+      blSection.hidden = false;
+      for (const src of bl) {
+        const li = document.createElement("li");
+        const a = document.createElement("a");
+        a.textContent = nodeIndex[src]?.label || src;
+        a.dataset.target = src;
+        a.addEventListener("click", () => showDetail(src));
+        li.appendChild(a);
+        const muted = document.createElement("span");
+        muted.className = "muted";
+        muted.textContent = ` (${src})`;
+        li.appendChild(muted);
+        blList.appendChild(li);
+      }
+    } else {
+      blSection.hidden = true;
+    }
+
+    cy.animate({ center: { eles: node }, zoom: Math.max(cy.zoom(), 1.0) }, { duration: 200 });
+  }
+
+  function rewriteInternalLinks(root) {
+    root.querySelectorAll("a[href]").forEach((a) => {
+      const href = a.getAttribute("href");
+      if (!href) return;
+      if (href.startsWith("/") && href.endsWith(".md")) {
+        const target = href.slice(1, -3);
+        if (nodeIndex[target]) {
+          a.className = "internal";
+          a.setAttribute("href", "javascript:void(0)");
+          a.addEventListener("click", (e) => {
+            e.preventDefault();
+            showDetail(target);
+          });
+          return;
+        }
+      }
+      a.className = "external";
+      a.setAttribute("target", "_blank");
+      a.setAttribute("rel", "noopener");
+    });
+  }
+
+  // Auto-show the first node (a dataset if available, else first concept)
+  const initial =
+    bundle.nodes.find((n) => n.data.type === "BigQuery Dataset") ||
+    bundle.nodes[0];
+  if (initial) showDetail(initial.data.id);
+})();
+
+</script>
+</body>
+</html>
