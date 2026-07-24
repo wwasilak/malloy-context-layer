@@ -3,7 +3,7 @@
 // =============================================================================
 // MERCHANDISING MODEL — product assortment, brand & category performance.
 // Imports the shared base and extends product / order-line sources.
-// Links only; concept definitions live in the Knowledge Plane (MOTLY).
+// Links only; concept definitions live in the Knowledge Plane (kp/ OKF bundle).
 // =============================================================================
 import "base.malloy"
 

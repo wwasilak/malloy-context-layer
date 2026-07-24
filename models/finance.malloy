@@ -2,7 +2,7 @@
 
 // =============================================================================
 // FINANCE MODEL — revenue, margin and FX/currency reporting. Imports the base.
-// Links only; concept definitions live in the Knowledge Plane (MOTLY).
+// Links only; concept definitions live in the Knowledge Plane (kp/ OKF bundle).
 // =============================================================================
 import "base.malloy"
 

@@ -3,7 +3,7 @@
 
 // =============================================================================
 // OPERATIONS MODEL — fulfillment & store productivity. Imports the shared base.
-// Links only; concept definitions live in the Knowledge Plane (MOTLY).
+// Links only; concept definitions live in the Knowledge Plane (kp/ OKF bundle).
 // =============================================================================
 import "base.malloy"
 
