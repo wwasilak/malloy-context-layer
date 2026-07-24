@@ -17,9 +17,5 @@ Average number of days between order date and delivery date across orders in sco
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| operations | `operations_order` | `avg_delivery_days` |
-
-Measured on [Order](../sales/order.md).
+_Defined in the Knowledge Plane but not yet linked from any Malloy model._
 <!-- END GENERATED -->

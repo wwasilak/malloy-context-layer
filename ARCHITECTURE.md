@@ -1,11 +1,13 @@
-# Architecture & build (v7 — simplified)
+# Architecture & build
 
 Two things in git, one command, links between them.
 
 ## A) Knowledge Plane — `kp/` (OKF bundle)
 
 Hand-edited markdown files (VS Code / Obsidian / OWOX Model Canvas), one concept
-per file, versioned in git. Folder = domain = steward. Identity = `uri:`
+per file, versioned in git. Folder = tier: `global/` = company-wide definitions
+(no single domain steward); `sales/`, `finance/`, `merchandising/`,
+`operations/` = local, one steward each. Identity = `uri:`
 frontmatter. Frontmatter: uri, type (entity | defined_class | measure |
 attribute), title, description, synonyms, steward, subtype_of, of (attribute →
 entity attachment), membership_rule, preferred_source, allowed_roles,
@@ -16,7 +18,29 @@ deprecated), tags. New concept = copy from `_templates/`. Files with any other
 - `kp/agent/examples.md` — canonical query shapes the agent copies
 - `kp/agent/gap-log.md` — agent-appended terms with no concept (demand-ranked backlog)
 - `kp/agent/corrections.md` — steward-confirmed wrong answers + standing hints
-- `kp/agent/evals/*.md` — gold-number cases (question, expected value, gold query)
+- `kp/agent/gap-log.md`, `question-log.md`, `corrections.md`, `evals/*.md`
+  (see the operational docs list in CLAUDE.md)
+
+### Global vs local concepts
+
+One definition per URI, always. Same label with genuinely different meanings =
+distinct URIs; the agent resolves ambiguous labels to `global/` unless the
+question names a domain, and states which definition it used. Promotion path:
+the build's "Shared concepts (>1 model)" report flags domain concepts other
+domains have started using — promotion is a reviewed PR that moves the file to
+`global/` (identity is the `uri:`, so links don't move). The build detects
+candidates; humans promote.
+
+### Authoring surfaces
+
+The bundle is canonical. Two ways in, one write path at a time:
+- **Direct edit** (default): VS Code / Obsidian on `kp/**`, reviewed via PR.
+- **Excel round-trip** (for stewards who won't touch markdown):
+  `python3 okf_to_excel.py` exports the bundle to `knowledge_plane_workbook.xlsx`;
+  `python3 excel_to_okf.py` imports it back (verified byte-identical on a full
+  cycle; generated Implementations blocks are preserved). Rule: while a
+  workbook cycle is in flight, Excel owns the frontmatter fields it carries —
+  do not hand-edit those same files in parallel.
 
 ## B) Malloy models — `models/` + data
 
@@ -45,8 +69,11 @@ separate knowledge_map.json — the bundle IS the agent context.
    (no # concept annotation) -> WARN.
 6. Write-back: Implementations tables, routing table (root index), domain
    indexes, data coverage (min/max of bundle.yaml `temporal_anchor`), views.
-7. Regenerate `kp_viz.html` (needs GoogleCloudPlatform/knowledge-catalog cloned;
-   `--conceptual` variant available via make_viz.py directly).
+7. Regenerate both graphs — `kp_viz.html` (full plane) and
+   `kp_viz_conceptual.html` (entities/attributes/relationships only). Best
+   effort: needs GoogleCloudPlatform/knowledge-catalog cloned and a Python with
+   pyyaml (the build probes python3/python/py -3 and reports the real cause if
+   it can't).
 
 CI: run build on every PR; fail on errors; fail if the working tree is dirty
 after build (forces committed write-back). CODEOWNERS per domain folder.

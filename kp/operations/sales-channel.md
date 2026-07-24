@@ -17,9 +17,5 @@ The channel through which an order was placed: Online or Physical store.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| base | `sales_order` | `channel` |
-
-Measured on [Order](../sales/order.md).
+_Defined in the Knowledge Plane but not yet linked from any Malloy model._
 <!-- END GENERATED -->

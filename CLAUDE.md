@@ -18,6 +18,9 @@
 
 1. Resolve the question to concepts via the routing table (labels, definitions;
    synonyms are in the concept files). Only `approved` concepts are governed.
+   If a label matches concepts in both `global/` and a domain folder, use the
+   global one — unless the question names the domain ("sales' definition of…").
+   Say which definition was applied.
 2. Take the field from `binding`; `preferred_source` in the concept file is the
    default source when several models carry the concept.
 3. Cross-domain question (concepts bound in disjoint sources)? Use a sanctioned
@@ -49,6 +52,22 @@ Three tiers — know which one you are in:
 3. **New metrics improvised from raw columns**: allowed only as clearly labeled
    *ungoverned / exploratory* figures — never presented as official. This is
    the only tier that belongs in the gap log.
+
+**The test that decides the tier — apply it before writing any query:**
+
+> Does a governed concept already exist for the quantity I am about to compute?
+
+- **Yes → use its binding.** Even if the grain differs. Need product-level
+  margin but `kp:Margin` is bound on `sales_order`? Reach the grain through
+  joins (`group_by: lines.sold_product.ProductName; aggregate: margin`), do NOT
+  recompute it from components. Re-deriving a governed concept from its inputs
+  (e.g. `sum(line_revenue - line_cost)` when `kp:Margin` exists) is tier 3, not
+  tier 2 — it agrees today and diverges silently the day the governed
+  definition changes.
+- **No → compute it, label it ungoverned, log it.**
+
+A different grain, a custom window, a ratio, or a needed join are NOT reasons
+to abandon a governed binding. They are reasons to navigate to it.
 
 ## When a term is NOT in the routing table
 

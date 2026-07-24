@@ -17,9 +17,5 @@ Total revenue valued at list price, before discounts, in the reporting currency.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| finance | `finance_order` | `gross_revenue` |
-
-Measured on [Order](../sales/order.md).
+_Defined in the Knowledge Plane but not yet linked from any Malloy model._
 <!-- END GENERATED -->

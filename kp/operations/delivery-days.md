@@ -17,9 +17,5 @@ Number of days between the order date and the delivery date for an order.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| operations | `operations_order` | `delivery_days` |
-
-Measured on [Order](../sales/order.md).
+_Defined in the Knowledge Plane but not yet linked from any Malloy model._
 <!-- END GENERATED -->

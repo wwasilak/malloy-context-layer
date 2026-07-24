@@ -17,9 +17,5 @@ Discount amount as a share of gross (list) revenue.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| finance | `finance_order` | `discount_rate` |
-
-Measured on [Order](../sales/order.md).
+_Defined in the Knowledge Plane but not yet linked from any Malloy model._
 <!-- END GENERATED -->

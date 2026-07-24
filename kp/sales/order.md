@@ -38,15 +38,5 @@ A purchase transaction placed by a customer at a store on a given date, composed
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| base | `customer_order_in_context` | `made_an_order` |
-| base | `order` | *(source)* |
-| base | `order_line_in_context` | `of_order` |
-| base | `sales_order` | *(source)* |
-| finance | `finance_order` | *(source)* |
-| operations | `operations_order` | *(source)* |
-| sales | `sales_performance` | *(source)* |
-
-**Preferred source:** `base.sales_order`
+_Defined in the Knowledge Plane but not yet linked from any Malloy model._
 <!-- END GENERATED -->

@@ -17,7 +17,5 @@ A single calendar day, used as the temporal anchor for transactions and reportin
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-| Model | Source | Field |
-|---|---|---|
-| base | `calendar_date` | *(source)* |
+_Defined in the Knowledge Plane but not yet linked from any Malloy model._
 <!-- END GENERATED -->
