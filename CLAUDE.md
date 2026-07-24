@@ -73,8 +73,25 @@ Three tiers — know which one you are in:
   definition changes.
 - **No → compute it, label it ungoverned, log it.**
 
-A different grain, a custom window, a ratio, or a needed join are NOT reasons
-to abandon a governed binding. They are reasons to navigate to it.
+**Pre-rebuttal — the excuses that do NOT license abandoning a governed
+binding. Before improvising from raw columns, check that you are not talking
+yourself into one of these:**
+
+- *"It needs a custom date window."* → Apply the window with `where:`; the
+  binding is unchanged.
+- *"It needs a different grain."* → Reach the grain through joins
+  (`group_by: lines.sold_product.ProductName; aggregate: <bound measure>`),
+  do NOT recompute from components.
+- *"It needs a join the model doesn't have inline."* → Use a sanctioned
+  in-context source or view. Never invent a join — but a needed join is not a
+  licence to recompute the metric by hand.
+- *"It's only a ratio / share / delta / projection."* → That is tier-2 analysis
+  built FROM the bound measures (`calculate:`, `all()`, `nest:`), not a new
+  metric from raw columns.
+
+None of these justify raw-column improvisation. A different grain, a custom
+window, a ratio, or a needed join are NOT reasons to abandon a governed
+binding. They are reasons to navigate to it.
 
 ## When a term is NOT in the routing table
 
@@ -97,6 +114,29 @@ to abandon a governed binding. They are reasons to navigate to it.
 ## When the user says an answer was wrong
 
 - Add an entry to `kp/agent/corrections.md` (question, answer, root cause if known).
+
+## Answer receipt (provenance footer)
+
+End every answer that returns a figure with a one-line receipt, so the number
+is auditable at a glance. This is the main mitigation for a silent wrong
+answer:
+
+`Basis: <governed measure(s) / ungoverned> | Freshness: <max date used> | Steward: <concept steward>`
+
+- **Basis** — name the governed concept(s) the figure resolves to (e.g.
+  `kp:TotalSales`), or mark it *ungoverned / exploratory* when it is tier 3.
+  For tier-2 analysis, name the governed inputs AND the method
+  (e.g. "naive YoY extrapolation of kp:TotalSales").
+- **Freshness** — the max date of the data actually used. If a relative window
+  was anchored to `max_date` (see Time), say so here.
+- **Steward** — the steward of the governing concept, from its frontmatter.
+  `global/` concepts have no single steward — write `global`.
+
+Example:
+`Basis: naive YoY extrapolation of kp:TotalSales (governed) | Freshness: 2024-12-31 (anchored to max_date) | Steward: global`
+
+Routine single-metric lookups still carry the receipt — it is cheap and it is
+what makes a wrong number catchable.
 
 ## Execution rules (runtime-neutral)
 
