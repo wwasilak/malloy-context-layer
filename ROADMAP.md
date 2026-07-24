@@ -3,10 +3,10 @@
 
 | Code | Item | Detail | Effort |
 |---|---|---|---|
-| GOV-1 | Profile for CLAUDE.md | Frontmatter: owner, status, approved_by. The most powerful context file must not be the least governed. | 15 min |
+| GOV-1 | Profile for CLAUDE.md — DONE | Frontmatter added to CLAUDE.md: owner, status, approved_by, timestamp (owner/approved_by = Knowledge Plane). The most powerful context file must not be the least governed. | done |
 | GOV-2 | Global/local tiers — DONE | `global/` folder (renamed from core) = company-wide definitions; domain folders = local. Promotion path: shared-concepts report flags candidates → reviewed PR moves the file. Same label, different meanings = distinct URIs; ambiguous labels resolve to global. One definition per URI stands. | done |
-| AGT-1 | Provenance footer | CLAUDE.md: every answer ends with source tier (governed measure / exploratory), data freshness (max date used), concept steward. Main mitigation for silent wrong answers; the "answer receipt". | 30 min |
-| AGT-2 | "Don't bail early" rebuttals | CLAUDE.md: pre-rebut the excuses for abandoning governed measures ("needs a custom date window", "needs a join", "needs a ratio" — none justify raw-column improvisation). | 30 min |
+| AGT-1 | Provenance footer — DONE | CLAUDE.md "Answer receipt" section: every answer ends with basis (governed measure / exploratory), data freshness (max date used), concept steward. Main mitigation for silent wrong answers; the "answer receipt". | done |
+| AGT-2 | "Don't bail early" rebuttals — DONE | CLAUDE.md pre-rebuttal block in the Analysis-freedom section: the excuses for abandoning governed measures ("needs a custom date window", "needs a join", "needs a ratio" — none justify raw-column improvisation). | done |
 | OPS-1 | CI workflow | `.github/workflows/build.yml`: run `node build.js` on every PR; fail on validation errors; fail if working tree is dirty after build (forces committed write-back). Turns every guarantee in this repo from convention into gate. | 1 hr |
 | OPS-2 | Steward onboarding + README refresh | One page: how to add/edit a concept (template, frontmatter, PR, what build errors mean). Refresh README (still describes MOTLY/Excel-era assets). | 1-2 hrs |
 
