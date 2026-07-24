@@ -4,7 +4,7 @@ type: measure
 title: My Measure
 description: One-sentence business definition (what it means, not how it's computed).
 synonyms: []
-steward: Finance            # omit only for core shared measures
+steward: Finance            # omit only for global (company-wide) shared measures
 allowed_roles: []          # optional: restrict who may see this concept
 last_validated: null        # stamped by the eval runner - do not edit
 status: draft

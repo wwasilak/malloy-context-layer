@@ -1,0 +1,9 @@
+# Keep the build write-back and the Linux CI gate byte-identical regardless of a
+# contributor's core.autocrlf setting: every text file is stored and checked out
+# with LF. build.js writes LF, so `npm run build` never dirties the tree on any
+# OS — which is exactly what .github/workflows/build.yml asserts.
+* text=auto eol=lf
+
+# Binary assets — never apply line-ending conversion.
+*.parquet binary
+*.xlsx    binary

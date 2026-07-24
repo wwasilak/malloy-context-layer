@@ -3,7 +3,7 @@
 // =============================================================================
 // SALES MODEL — sales-performance KPIs. Imports the shared base and extends
 // the core order fact; defines NO plumbing of its own.
-// Links only; concept definitions live in the Knowledge Plane (MOTLY).
+// Links only; concept definitions live in the Knowledge Plane (kp/ OKF bundle).
 // =============================================================================
 import "base.malloy"
 

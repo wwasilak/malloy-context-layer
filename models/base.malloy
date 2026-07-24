@@ -11,7 +11,7 @@ given:
 // BASE MODEL — shared data plane + core semantics for ALL departments.
 // Department models (sales, operations, finance, merchandising) `import` this
 // file and EXTEND its sources; they never redefine the plumbing.
-// Links only; concept definitions live in the Knowledge Plane (MOTLY).
+// Links only; concept definitions live in the Knowledge Plane (kp/ OKF bundle).
 // =============================================================================
 # model = "base"
 
