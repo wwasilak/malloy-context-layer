@@ -15,5 +15,9 @@ Number of distinct orders in scope.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Defined in the Knowledge Plane but not yet linked from any Malloy model._
+| Model | Source | Field |
+|---|---|---|
+| base | `sales_order` | `order_count` |
+
+Measured on [Order](../sales/order.md).
 <!-- END GENERATED -->

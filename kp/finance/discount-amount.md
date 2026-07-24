@@ -18,5 +18,9 @@ Total discount given: gross (list) revenue minus net sales, in the reporting cur
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Defined in the Knowledge Plane but not yet linked from any Malloy model._
+| Model | Source | Field |
+|---|---|---|
+| finance | `finance_order` | `discount_amount` |
+
+Measured on [Order](../sales/order.md).
 <!-- END GENERATED -->

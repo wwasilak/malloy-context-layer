@@ -17,5 +17,9 @@ Share of orders in scope delivered within three days of the order date.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Defined in the Knowledge Plane but not yet linked from any Malloy model._
+| Model | Source | Field |
+|---|---|---|
+| operations | `operations_order` | `delivered_within_3d_rate` |
+
+Measured on [Order](../sales/order.md).
 <!-- END GENERATED -->

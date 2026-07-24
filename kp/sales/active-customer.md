@@ -27,5 +27,7 @@ Subtype of [Customer](customer.md).
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Defined in the Knowledge Plane but not yet linked from any Malloy model._
+| Model | Source | Field |
+|---|---|---|
+| base | `customer_order_in_context` | `is_active_customer` |
 <!-- END GENERATED -->

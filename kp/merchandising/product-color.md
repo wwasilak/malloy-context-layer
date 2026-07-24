@@ -20,5 +20,7 @@ Attribute of [Product](product.md).
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Defined in the Knowledge Plane but not yet linked from any Malloy model._
+| Model | Source | Field |
+|---|---|---|
+| merchandising | `product_performance` | `color` |
 <!-- END GENERATED -->

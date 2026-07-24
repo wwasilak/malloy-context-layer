@@ -7,8 +7,8 @@
 | GOV-2 | Global/local tiers — DONE | `global/` folder (renamed from core) = company-wide definitions; domain folders = local. Promotion path: shared-concepts report flags candidates → reviewed PR moves the file. Same label, different meanings = distinct URIs; ambiguous labels resolve to global. One definition per URI stands. | done |
 | AGT-1 | Provenance footer — DONE | CLAUDE.md "Answer receipt" section: every answer ends with basis (governed measure / exploratory), data freshness (max date used), concept steward. Main mitigation for silent wrong answers; the "answer receipt". | done |
 | AGT-2 | "Don't bail early" rebuttals — DONE | CLAUDE.md pre-rebuttal block in the Analysis-freedom section: the excuses for abandoning governed measures ("needs a custom date window", "needs a join", "needs a ratio" — none justify raw-column improvisation). | done |
-| OPS-1 | CI workflow | `.github/workflows/build.yml`: run `node build.js` on every PR; fail on validation errors; fail if working tree is dirty after build (forces committed write-back). Turns every guarantee in this repo from convention into gate. | 1 hr |
-| OPS-2 | Steward onboarding + README refresh | One page: how to add/edit a concept (template, frontmatter, PR, what build errors mean). Refresh README (still describes MOTLY/Excel-era assets). | 1-2 hrs |
+| OPS-1 | CI workflow — DONE | `.github/workflows/build.yml`: runs `npm run build` on every PR + pushes to main; fails on validation errors; fails if the working tree is dirty after build (forces committed write-back). Turns every guarantee in this repo from convention into gate. | done |
+| OPS-2 | Steward onboarding + README refresh — DONE | `docs/steward-onboarding.md`: how to add/edit a concept (template, frontmatter, PR, what each build error means). README rewritten for the OKF-bundle reality (MOTLY/knowledge_map.json era removed). | done |
 
 ## Phase 2 — Next (the load-bearing build: eval runner)
 

@@ -17,5 +17,7 @@ The daily rate for converting an amount from one currency into a reporting curre
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Defined in the Knowledge Plane but not yet linked from any Malloy model._
+| Model | Source | Field |
+|---|---|---|
+| base | `currency_exchange_rate` | *(source)* |
 <!-- END GENERATED -->

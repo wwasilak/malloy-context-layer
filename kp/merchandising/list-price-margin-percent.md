@@ -17,5 +17,9 @@ Average catalog margin of products: (list price minus unit cost) divided by list
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Defined in the Knowledge Plane but not yet linked from any Malloy model._
+| Model | Source | Field |
+|---|---|---|
+| merchandising | `product_performance` | `avg_list_price_margin_percent` |
+
+Measured on [Product](product.md).
 <!-- END GENERATED -->

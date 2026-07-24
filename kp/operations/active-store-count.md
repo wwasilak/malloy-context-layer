@@ -17,5 +17,9 @@ Number of stores in scope that are not closed.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Defined in the Knowledge Plane but not yet linked from any Malloy model._
+| Model | Source | Field |
+|---|---|---|
+| operations | `store_portfolio` | `active_store_count` |
+
+Measured on [Store](store.md).
 <!-- END GENERATED -->

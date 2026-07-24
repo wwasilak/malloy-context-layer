@@ -1,53 +1,72 @@
+# Knowledge Plane + Malloy
 
-## Mini project  : 
-
-Trying to apply Knowledge Plane concepts using Malloy. The concepts come from Juha Korpela substack articles:
+A working experiment: use a **Malloy** semantic model as the Data Plane and a
+separate, git-versioned **Knowledge Plane** as the meaning layer — business
+concepts, definitions and relationships — linked but never duplicated. The idea
+comes from Juha Korpela's writing on semantic architecture:
 
 - https://commonsensedata.substack.com/p/the-quest-for-semantic-architecture
 - https://commonsensedata.substack.com/p/semantic-linking-the-aboutness-of
 - https://commonsensedata.substack.com/p/semantic-linking-managing-mappings
 - https://commonsensedata.substack.com/p/building-semantics-with-conceptual
 
+## The shape of it
 
-Idea behind this exercise: checking if a Malloy semantic model can be used to create Knowledge and Data Planes as described by Juha Korpela. Knowledge Plane is a layer where business concepts, definitions and relationships are described. It should be separate from the Data Plane. Knowledge Plane is implemented as a MOTLY file. Malloy model only links to concepts through # concept annotations, so meaning lives in one place and is never duplicated across models. An exporter reads both, validates that every linked concept actually exists in the Knowledge Plane, and generates two outputs: an RDF graph and a Markdown glossary for use with AI agents. The result is an executable model that also serves as its own conceptual documentation.
+Two artifacts in git, one build command, links between them:
 
+- **`kp/` — the Knowledge Plane**, an [OKF](https://github.com/GoogleCloudPlatform/knowledge-catalog)
+  bundle: one markdown file per concept, YAML frontmatter for identity
+  (`uri:`) and governance (`status`, `steward`, …). Folder = tier: `kp/global/`
+  is company-wide, the domain folders (`sales/`, `finance/`, `merchandising/`,
+  `operations/`) are locally stewarded. Hand-edited, reviewed by PR.
+- **`models/` — the Malloy models**, the Data Plane. `base.malloy` holds all the
+  plumbing (sources, in-context sources, universal measures); the thin
+  department models `import "base.malloy"` and extend it. Fields link to a
+  concept with a `# concept = "kp:..."` annotation, so meaning lives in one place.
+- **`build.js` — the link.** It validates the bundle, compiles every model,
+  checks every annotation resolves to a real concept (and every
+  `preferred_source` to a real source), then **writes the mapping back** into the
+  bundle: each concept's `## Implementations` table and the root
+  `kp/index.md` — the agent's routing table (concept · kind · status ·
+  definition · binding) plus data coverage and sanctioned views. There is no
+  separate map file; **the bundle is the agent context.**
 
-Some comments:
-- done mostly by talking with Claude
-- uses MOTLY language for knowledge_plane - it is used in Malloy models for annotations so we have single language in both places
-- in real life it would be a Malloy Publisher feature probably
-- in the current iteration Malloy models were created from a single base model to check if agent can quickly decide which model to query
-
-
-## Current iteration:
-
-Assets:
-- knowledge_plane.motly - the canonical Knowledge Plane: concepts, definitions and relationships, manual maintenance.
-- Malloy models - the Data Plane, as several Malloy models that all link to the same Knowledge Plane concepts:
-  - models/base.malloy - the shared foundation (`# model = "base"`). Defines the data-plane sources (customer, product, store, order, order line, calendar date, currency), the in-context sources (order_line_in_context, customer_order_in_context) and the core order fact `sales_order` with the universal measures. All plumbing lives here, once.
-  - models/sales.malloy, models/operations.malloy, models/finance.malloy, models/merchandising.malloy - thin department models. Each does `import "base.malloy"` and EXTENDS the base sources (e.g. `sales_order extend { ... }`) to add only its own department-specific dimensions/measures. They never redefine the plumbing. This is what makes a concept like kp:TotalSales or kp:Order genuinely shared across models instead of re-declared.
-- exporter.js - reads the KP and compiles every model in models/ (loading by URL so `import` resolves), validates that every linked concept exists in the KP and that each preferred_source resolves to a real (model, source), then generates the output. Concepts are attributed to the model whose file actually defines the annotated source/field, so the "Shared concepts (>1 model)" report stays meaningful. Run it with `npm run build`.
-- knowledge_map.json - the generated output: a meaning + routing map for an AI agent (concepts, definitions, stewards, which models touch each concept, and relationships). It deliberately carries NO field inventory - fields live in the Malloy models, which are the source of truth (compile the named source to see them).
-
-
-## Initial version: 
-Dropped as agent was loosing a lot of time on using knowledge_map.malloy file. 
-
-Assets:
-- knowledge_plane.motly - the canonical Knowledge Plane: concepts, definitions and relationships, manual maintenance
-- sales.malloy - a Malloy model following Korpela's naming conventions; sources and fields are linked to concepts via # concept annotations.
-- exporter.js - reads the KP and the model, validates that every linked concept exists, and generates the outputs.
-- knowledge_map.ttl / knowledge_map.md - generated outputs: an RDF graph and a glossary (for AI agent). Markdown file for simple project. TTL file for more complex ones.
-- knowledge_map.malloy - Malloy model which allows AI agent to query ttl file (or parquets derived from ttl file) and understand how the Knowledge Plane links to the Data Plane.
-
+The result is an executable model that is also its own conceptual documentation,
+and a routing table an AI agent uses to answer questions from governed
+definitions rather than improvised SQL.
 
 ## Getting started
 
-Run from the repo root:
+From the repo root (DuckDB resolves `ParquetFiles/...` relative to it):
+
+```
 npm install
 npm run build
+```
 
-Regenerates `knowledge_map.json` from `knowledge_plane.motly` and `models/*.malloy`. All commands assume the repo root as the working directory — DuckDB resolves table paths (`ParquetFiles/...`) relative to it.
+`npm run build` validates `kp/**` against `models/*.malloy` and regenerates the
+write-back (routing table, Implementations tables, indexes, and — if a
+`knowledge-catalog` clone and Python/pyyaml are present — the `kp_viz*.html`
+graphs). It **fails hard** on any validation error. CI runs the same command on
+every PR and additionally fails if the write-back left the tree dirty — see
+[`.github/workflows/build.yml`](.github/workflows/build.yml).
 
+## Where to look
 
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** — how the two planes, the links, and the
+  build fit together; authoring surfaces (direct edit vs Excel round-trip).
+- **[docs/steward-onboarding.md](docs/steward-onboarding.md)** — add or edit a
+  concept: templates, frontmatter, PR flow, what each build error means.
+- **[CLAUDE.md](CLAUDE.md)** — the agent protocol: routing, the governance tiers,
+  answer receipts, execution rules.
+- **[ROADMAP.md](ROADMAP.md)** — what's done and what's next.
+- **`kp/agent/`** — operational docs the agent reads and appends to: `examples.md`,
+  `gap-log.md`, `question-log.md`, `corrections.md`, `evals/`.
 
+## Notes
+
+- Runtime-neutral: the plane is just files + `CLAUDE.md`. Models can be served
+  via Malloyyo, Malloy Publisher, or a local Malloy MCP.
+- Built mostly in conversation with Claude. Earlier iterations used a MOTLY
+  Knowledge Plane and a generated `knowledge_map.json`; both are gone — the OKF
+  bundle replaced them.

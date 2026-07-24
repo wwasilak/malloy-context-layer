@@ -20,5 +20,7 @@ Attribute of [Order](../sales/order.md).
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Defined in the Knowledge Plane but not yet linked from any Malloy model._
+| Model | Source | Field |
+|---|---|---|
+| finance | `finance_order` | `order_currency` |
 <!-- END GENERATED -->

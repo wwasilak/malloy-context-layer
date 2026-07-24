@@ -18,5 +18,9 @@ Net sales divided by units sold; the average realized price per unit. (ASP)
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Defined in the Knowledge Plane but not yet linked from any Malloy model._
+| Model | Source | Field |
+|---|---|---|
+| finance | `finance_order` | `average_selling_price` |
+
+Measured on [Order](../sales/order.md).
 <!-- END GENERATED -->
