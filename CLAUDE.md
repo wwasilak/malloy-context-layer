@@ -1,3 +1,10 @@
+---
+owner: Knowledge Plane
+status: approved
+approved_by: Knowledge Plane
+timestamp: 2026-07-24
+---
+
 # Working with the Knowledge Plane + Malloy models
 
 ## What you have
