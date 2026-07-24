@@ -18,5 +18,8 @@ Attribute of [Order Line](../sales/order-line.md).
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Defined in the Knowledge Plane but not yet linked from any Malloy model._
+| Model | Source | Field |
+|---|---|---|
+| base | `order_line_in_context` | `Quantity` |
+| base | `order_line` | `Quantity` |
 <!-- END GENERATED -->

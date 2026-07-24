@@ -17,5 +17,9 @@ Average number of product units per order: total units divided by order count.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Defined in the Knowledge Plane but not yet linked from any Malloy model._
+| Model | Source | Field |
+|---|---|---|
+| sales | `sales_performance` | `units_per_order` |
+
+Measured on [Order](../sales/order.md).
 <!-- END GENERATED -->

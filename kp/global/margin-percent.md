@@ -15,5 +15,10 @@ Gross margin expressed as a ratio of total sales.
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Defined in the Knowledge Plane but not yet linked from any Malloy model._
+| Model | Source | Field |
+|---|---|---|
+| base | `sales_order` | `margin_percent` |
+| finance | `finance_order` | `gross_margin_percent` |
+
+Measured on [Order](../sales/order.md).
 <!-- END GENERATED -->

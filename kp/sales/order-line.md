@@ -31,5 +31,11 @@ A single line on an order, recording one product, its quantity and the prices ap
 ## Implementations
 
 <!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->
-_Defined in the Knowledge Plane but not yet linked from any Malloy model._
+| Model | Source | Field |
+|---|---|---|
+| base | `order_line` | *(source)* |
+| base | `order_line_in_context` | *(source)* |
+| merchandising | `product_line` | *(source)* |
+
+**Preferred source:** `base.order_line_in_context`
 <!-- END GENERATED -->
