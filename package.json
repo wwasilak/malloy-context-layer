@@ -2,7 +2,12 @@
   "name": "malloy-knowledge-plane-okf",
   "private": true,
   "scripts": {
-    "build": "cross-env MODELS_DIR=models node build.js"
+    "build": "cross-env MODELS_DIR=models node build.js",
+    "eval": "cross-env MODELS_DIR=models node evals/run.js",
+    "eval:gold": "cross-env MODELS_DIR=models node evals/gold.js",
+    "eval:check": "cross-env MODELS_DIR=models node evals/gold.js --check",
+    "eval:report": "node evals/report.js",
+    "eval:selftest": "cross-env MODELS_DIR=models node evals/selftest.js"
   },
   "devDependencies": {
     "cross-env": "^7.0.3"

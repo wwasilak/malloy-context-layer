@@ -31,6 +31,13 @@ Two artifacts in git, one build command, links between them:
   definition · binding) plus data coverage and sanctioned views. There is no
   separate map file; **the bundle is the agent context.**
 
+- **`evals/` — the proof.** The build shows the plane is *consistent*; the eval
+  loop shows the agent actually *uses* it: routes to the right concept, applies
+  membership rules verbatim, refuses ungoverned terms, and does not quietly
+  re-derive a governed measure from raw columns. Cases live in
+  `kp/agent/evals/`, results are JSONL stamped with a semantic identity hash, so
+  a number that moves can be attributed to the data or to the meaning.
+
 The result is an executable model that is also its own conceptual documentation,
 and a routing table an AI agent uses to answer questions from governed
 definitions rather than improvised SQL.
@@ -51,6 +58,14 @@ graphs). It **fails hard** on any validation error. CI runs the same command on
 every PR and additionally fails if the write-back left the tree dirty — see
 [`.github/workflows/build.yml`](.github/workflows/build.yml).
 
+To run the eval loop (needs the `claude` CLI on PATH and the Malloy MCP server):
+
+```
+npm run eval:check     # cases parse + gold queries still run — no agent needed
+npm run eval           # every case, 3 runs each, against the committed fixtures
+npm run eval:report    # pass rate by category + what flipped since last run
+```
+
 ## Where to look
 
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** — how the two planes, the links, and the
@@ -59,6 +74,8 @@ every PR and additionally fails if the write-back left the tree dirty — see
   concept: templates, frontmatter, PR flow, what each build error means.
 - **[CLAUDE.md](CLAUDE.md)** — the agent protocol: routing, the governance tiers,
   answer receipts, execution rules.
+- **[docs/evals.md](docs/evals.md)** — the eval loop: writing a case, choosing a
+  grading kind, anchored ground truth, telemetry, semantic identity.
 - **[ROADMAP.md](ROADMAP.md)** — what's done and what's next.
 - **`kp/agent/`** — operational docs the agent reads and appends to: `examples.md`,
   `gap-log.md`, `question-log.md`, `corrections.md`, `evals/`.

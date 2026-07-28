@@ -6,6 +6,7 @@ description: "Gross margin expressed as a ratio of total sales."
 tags: [global, approved]
 status: approved
 timestamp: 2026-07-15
+last_validated: 2026-07-28
 ---
 
 # Margin Percent

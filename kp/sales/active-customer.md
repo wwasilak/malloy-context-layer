@@ -10,6 +10,7 @@ tags: [Sales, approved]
 status: approved
 approved_by: Sales
 timestamp: 2026-07-15
+last_validated: 2026-07-28
 ---
 
 # Active Customer

@@ -6,6 +6,7 @@ description: "Number of distinct orders in scope."
 tags: [global, approved]
 status: approved
 timestamp: 2026-07-15
+last_validated: 2026-07-28
 ---
 
 # Order Count

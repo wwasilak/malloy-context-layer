@@ -10,16 +10,28 @@
 | OPS-1 | CI workflow — DONE | `.github/workflows/build.yml`: runs `npm run build` on every PR + pushes to main; fails on validation errors; fails if the working tree is dirty after build (forces committed write-back). Turns every guarantee in this repo from convention into gate. | done |
 | OPS-2 | Steward onboarding + README refresh — DONE | `docs/steward-onboarding.md`: how to add/edit a concept (template, frontmatter, PR, what each build error means). README rewritten for the OKF-bundle reality (MOTLY/knowledge_map.json era removed). | done |
 
-## Phase 2 — Next (the load-bearing build: eval runner)
+## Phase 2 — the load-bearing build: eval runner — DONE
 
-| Code | Item | Detail | Effort |
+Shipped as `evals/` + `.github/workflows/eval.yml`. See `docs/evals.md` and
+`PHASE2_SPEC.md`. `npm run eval` produces a scored, timestamped,
+provenance-stamped results file; `npm run eval:report` diffs the last two runs.
+
+| Code | Item | Detail | Status |
 |---|---|---|---|
-| EVAL-1 | Eval runner | Loop `kp/agent/evals/*.md` through headless Claude Code; score numeric/refusal/contains; write per-case results. Closes the learning loop, enables definition-change impact detection, stamps `last_validated`, powers drift runs. Everything else assumes it exists. | 1-2 days |
-| EVAL-2 | Anchored ground truth | Pin evals to a snapshot date OR grade the gold_query rather than the number (gold_query field already supports this). Evals must not rot when data moves. | with EVAL-1 |
-| EVAL-3 | Results as telemetry | Each run records: git SHA of kp/, model ID, runtime, per-case pass/fail, tokens, latency — appended to a results file/table so regressions become a query. | with EVAL-1 |
-| EVAL-4 | Fixture data for CI | Commit small sample parquets; evals run hermetically in CI on fixtures, on live data for scheduled drift runs. (Malloyyo fixtures pattern.) | 0.5 day |
-| EVAL-6 | Semantic identity hash | Hash that identifies the *meaning* a number was produced under: canonical KP content (git SHA of `kp/`) + model files + execution context (malloy version, duckdb version, dialect, runtime settings). Stamp it on every eval result and answer receipt. Makes drift diagnosable: same identity + different number = the data moved; different identity = the meaning moved. (Joe Reis, contract-digest pattern.) | 0.5 day |
-| EVAL-5 | Seed from real usage | Freeze the "2023 situation + 2024 prediction" trace as an eval (tier-boundary + coverage-anchoring); keep harvesting question-log/corrections entries into cases. | ongoing |
+| EVAL-1 | Eval runner — DONE | `evals/run.js` loops `kp/agent/evals/*.md` through headless Claude Code (prompt over stdin), grades numeric/refusal/contains/query_shape/analysis, runs each case N=3 with a quorum, exits non-zero on failure. Cross-checks (`must_use`, `must_not_contain`, `expect_receipt`) run for every kind and are what catch the real failures. | done |
+| EVAL-2 | Anchored ground truth — DONE | `query_shape` grading runs the agent's Malloy AND the `gold_query` against the same data and compares result sets (order-insensitive; `exact` / `values` / `subset` recorded). Gold numbers are pinned to committed fixtures. `membership-verbatim` converted to method grading — its bound measure anchors to `LOCALTIMESTAMP`, so a pinned number would rot on a calendar boundary. | done |
+| EVAL-3 | Results as telemetry — DONE | One JSONL row per (case × run) in `evals/results/`, plus a `run_meta` header line. Records verdict + reason, answer excerpt, executed Malloy, extracted vs expected, tokens, cost, latency, turns, receipt presence, semantic identity, model, runtime, data source. `evals/report.js` prints per-category pass rate, pass→fail flips and flaky cases. `last_validated` stamping on passing `must_use` concepts — the writer `ARCHITECTURE.md` documented but nothing implemented. | done |
+| EVAL-4 | Fixture data for CI — DONE (no new files) | The parquets under `ParquetFiles/` are already committed, so CI checks out byte-identical data and gold values are already stable. A second sampled copy would add a sync burden and a fixture-vs-live gold discrepancy for no gain, so `fixtures` means the committed set resolved via WORKDIR (as `build.js` does) and `--live` switches to `EVAL_LIVE_WORKDIR`. | done |
+| EVAL-6 | Semantic identity hash — DONE | `sha256(digest(kp/) + digest(models/) + digest(CLAUDE.md) + malloy/duckdb/dialect)` on every result row; `eval:report` uses it to say whether a flip means the data moved or the meaning moved. Digests the WORKING TREE (evals matter most on uncommitted edits); git tree shas recorded alongside with a dirty flag. `CLAUDE.md` is included because the routing protocol can move every number without touching a concept. | done |
+| EVAL-5 | Seed from real usage | Both known regressions run and are covered by the selftest. Harvesting from question-log/corrections continues; target ~30 cases, refusal + tier-boundary over-represented. | ongoing |
+
+Also shipped, not in the original spec:
+
+| Item | Detail |
+|---|---|
+| `eval:gold` / `eval:check` | Gold values are computed from `gold_query` and written into the case, never typed. `eval:check` is the read-only CI form — verifies every case parses, every gold query still runs, and no committed value drifted, with no agent involved, so it can gate today. It immediately found two cases whose gold queries had never been executable. |
+| `eval:selftest` | The regressions must FAIL against a deliberately stripped `CLAUDE.md` and PASS against the real one. A suite that passes everything is indistinguishable from one that grades nothing. |
+| authored-vs-read grading | `must_not_contain` matches only text the agent WROTE; `must_use` matches everything it touched. Reading a binding's definition is not re-deriving it — `average_order_value` is literally defined as `total_sales / order_count`, so compile output echoes the forbidden pattern back at a correct agent. |
 
 ## Phase 3 — Server adoption (Publisher or Malloyyo; pick one)
 
