@@ -18,6 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const okf = require('./okf-lib');
 const mal = require('./malloy-lib');
+const { checkGold } = require('./evals/lib/goldcheck');
 
 const KP_DIR     = process.env.KP_DIR     || 'kp';
 const MODELS_DIR = mal.MODELS_DIR;
@@ -71,7 +72,11 @@ async function compileModel(filePath) {
     }
     sources[exp.name] = { concept: conceptOf(exp), fieldConcepts, joinRoles, views, ungoverned };
   }
-  return { model: modelName, sources, filePath };
+  // Everything this file can SEE, defined here or imported. Only used to build
+  // the source index for the tier-0 gold checks below — recorded here so those
+  // checks reuse this compile instead of paying for a second one.
+  const exposes = model.explores.map(e => e.name);
+  return { model: modelName, sources, exposes, filePath };
 }
 
 // ---- main --------------------------------------------------------------------
@@ -187,9 +192,17 @@ async function compileModel(filePath) {
   }
 
   // 5. coverage checks
-  for (const [uri, c] of Object.entries(canon)) {
-    if (c.status === 'approved' && !touch[uri])
-      warnings.push(`[coverage] approved but unbuilt: ${uri} — no model implements it`);
+  // An APPROVED concept with no implementation is a governed definition the
+  // agent can route to and then cannot answer from — the routing table promises
+  // a binding that does not exist. That is an error, not a warning (SIMP-4,
+  // tier 0). Drafts are exempt: unbuilt is the normal state of a draft.
+  const unbuilt = Object.entries(canon)
+    .filter(([uri, c]) => c.status === 'approved' && !touch[uri])
+    .map(([uri]) => uri);
+  if (unbuilt.length) {
+    console.error('\nBUILD FAILED — approved concepts with no implementation:');
+    unbuilt.forEach(u => console.error(`  ${u} — no model implements it (bind it, or set status: draft)`));
+    process.exit(1);
   }
   for (const m of models)
     for (const [srcName, s] of Object.entries(m.sources)) {
@@ -198,6 +211,28 @@ async function compileModel(filePath) {
         warnings.push(`[coverage] built but ungoverned in ${m.model}.${srcName}: ${un.join(', ')} — fields with no # concept annotation`);
     }
   warnings.length && console.warn(warnings.filter(w => w.startsWith('[coverage]')).map(w => '  WARN ' + w).join('\n'));
+
+  // 5b. tier-0 eval checks (SIMP-4). Every eval case parses, every gold_query
+  //     still runs, no committed gold value has drifted. No LLM is involved, so
+  //     this is validation like everything above it — and it gates PRs here
+  //     instead of in a second workflow that has to be remembered.
+  //     The source index is assembled from the compile we already did rather
+  //     than compiling every model a second time.
+  {
+    const index = { defines: {}, exposes: {} };
+    for (const m of models) {
+      for (const src of Object.keys(m.sources)) if (!index.defines[src]) index.defines[src] = m.filePath;
+      for (const src of (m.exposes || [])) (index.exposes[src] ||= []).push(m.filePath);
+    }
+    const { lines, problems } = await checkGold({ workdir: WORKDIR, index });
+    lines.forEach(l => console.log('  ' + l));
+    if (problems.length) {
+      console.error('\nBUILD FAILED — eval suite (tier 0):');
+      problems.forEach(p => console.error('  ' + p));
+      process.exit(1);
+    }
+    console.log(`Eval cases (tier 0): ${lines.length} checked, gold current`);
+  }
 
   // 6. write everything back into the bundle (the bundle IS the agent context)
   const sourceConcepts = {};

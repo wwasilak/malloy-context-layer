@@ -13,11 +13,17 @@
 //   that here than to watch a sweep of agent runs fail for a reason that has
 //   nothing to do with the agent.
 //
+//   --check is the read-only form, and it is now the SAME code the build gate
+//   runs (goldcheck.js, SIMP-4) rather than a second implementation of it.
+//   Kept as a command because it is useful standalone — `--live`, or one case
+//   at a time, without a full build.
+//
 //   Usage: npm run eval:gold [-- --case <name>] [-- --check]
 // =============================================================================
 const path = require('path');
 const { loadCases, EVALS_DIR } = require('./lib/cases');
 const mal = require('./lib/malloy');
+const { checkGold } = require('./lib/goldcheck');
 const { setFrontmatterField } = require('./lib/stamp');
 
 (async () => {
@@ -32,6 +38,19 @@ const { setFrontmatterField } = require('./lib/stamp');
     else throw new Error(`unknown flag: ${argv[i]}`);
   }
 
+  const workdir = mal.workdirFor(live ? 'live' : 'fixtures');
+  const index = await mal.buildSourceIndex(workdir);
+
+  // --check is read-only and shared with the build gate.
+  if (check) {
+    const { lines, problems } = await checkGold({ workdir, index, only });
+    lines.forEach((l) => console.log('  ' + l));
+    problems.forEach((p) => console.error('  FAIL   ' + p));
+    console.log('');
+    console.log(`Gold check: ${problems.length ? problems.length + ' problem(s)' : 'all gold values current'}`);
+    process.exit(problems.length ? 1 : 0);
+  }
+
   const cases = loadCases(undefined, only);
   const broken = cases.filter((c) => c.errors && c.errors.length);
   if (broken.length) {
@@ -39,9 +58,6 @@ const { setFrontmatterField } = require('./lib/stamp');
     for (const c of broken) c.errors.forEach((e) => console.error(`  ${c._path}: ${e}`));
     process.exit(1);
   }
-
-  const workdir = mal.workdirFor(live ? 'live' : 'fixtures');
-  const index = await mal.buildSourceIndex(workdir);
 
   let written = 0;
   let failures = 0;
@@ -78,20 +94,6 @@ const { setFrontmatterField } = require('./lib/stamp');
     if (value == null) {
       console.error(`  BROKEN ${c.name} — gold_query for a numeric case must return exactly one row with one numeric column`);
       failures++;
-      continue;
-    }
-
-    if (check) {
-      const drift = c.expect_value != null && Math.abs(value - c.expect_value) > Math.abs(value) * 1e-9;
-      if (c.expect_value == null) {
-        console.error(`  MISSING ${c.name} — expect_value not committed (gold is ${value})`);
-        failures++;
-      } else if (drift) {
-        console.error(`  DRIFT  ${c.name} — committed ${c.expect_value}, gold_query now yields ${value}`);
-        failures++;
-      } else {
-        console.log(`  ok     ${c.name} — ${value}`);
-      }
       continue;
     }
 
