@@ -165,7 +165,7 @@ const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').replace(/-\d{
       try {
         g = await grade(c, res, ctx);
       } catch (e) {
-        g = { pass: false, detail: `grader error: ${e.message || e}`, extracted: null, receipt_present: false };
+        g = { pass: false, detail: `grader error: ${e.message || e}`, extracted: null, receipt_present: false, cross_checks: [] };
       }
       runs.push(g.pass);
 
@@ -183,6 +183,10 @@ const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').replace(/-\d{
         expect_value: c.expect_value,
         gold_source: c._gold_source,
         receipt_present: g.receipt_present,
+        // The evidence behind a cross-check verdict: which pattern, in which
+        // artifact, with the surrounding text (EVAL-7). A failure that cannot be
+        // adjudicated from its own row costs a manual transcript re-read.
+        cross_checks: g.cross_checks || [],
         must_use: c.must_use,
         tool_calls: (res.toolCalls || []).length,
         malloy_tool_calls: res.malloy_tool_calls ?? null,

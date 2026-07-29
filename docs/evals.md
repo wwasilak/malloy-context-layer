@@ -75,6 +75,27 @@ the right number and still be wrong: a margin re-derived as
 diverges silently the day the definition changes. Number grading cannot see
 that. The cross-checks can.
 
+### What each cross-check searches (EVAL-7)
+
+The two search different text, deliberately:
+
+| check | searched | why |
+|---|---|---|
+| `must_use` | the **whole trace** — prose, every tool call, and what came back from tools | reaching for a concept counts however it shows up; a concept can be used in a query without being named in the answer |
+| `must_not_contain` | only what the agent **committed to**: the final answer and the queries it actually executed | exploration is not commitment |
+
+Compiling an expression and then discarding it is the agent working correctly,
+and grading it as a violation fails a run for thinking — that is precisely the
+false positive the first sweep produced. Tool *results* are excluded for the
+same reason from the other direction: `average_order_value` is defined in the
+model as `total_sales / order_count`, so any compile output echoes the forbidden
+pattern back at an agent that did exactly the right thing.
+
+When a `must_not_contain` does match, the result row records which artifact it
+matched (`final_answer` or `executed_malloy[i]`), the matched text, and ~200
+characters of surrounding context — a verdict that cannot be adjudicated from
+its own row costs a manual transcript re-read.
+
 Prefer `query_shape` over `numeric` for anything time-relative — see anchoring
 below. Prefer `analysis` when several output shapes are equally correct;
 `query_shape` on an open-ended question marks correct variants as failures, and
@@ -159,6 +180,28 @@ most valuable on uncommitted edits — that is exactly when someone is changing 
 definition and wants to know what it breaks — and a committed-tree hash would
 describe code that is not the code under test. Git tree shas are recorded
 alongside, with a `dirty` flag when the two disagree.
+
+### What is NOT meaning (EVAL-8)
+
+The runner writes back into the very tree it digests, so three things are
+excluded or normalised away before hashing — otherwise every successful sweep
+would change the identity and the next report would announce "the meaning
+moved" when only a date moved, which is the exact false signal this hash exists
+to prevent:
+
+- **`last_validated:` lines** are stripped from text files. The stamp is
+  evidence that a definition was checked, not part of what it says.
+- **`kp/agent/gap-log.md`** and **`kp/agent/question-log.md`** are excluded
+  entirely. Recording that something is *ungoverned*, or that a question was
+  asked, changes no governed definition — and both grow on ordinary use.
+- The `dirty` flag ignores the same files, and ignores a concept file whose only
+  diff from HEAD is its `last_validated` stamp. A flag that reports drift the
+  hash deliberately ignores is just a second false signal.
+
+`kp/agent/examples.md` and `kp/agent/corrections.md` stay **in**. Those are
+standing hints the agent reads and acts on: editing them can move a number,
+which is what "the meaning changed" means. Binary fixtures (`ParquetFiles/`)
+are always hashed byte-for-byte — no text normalisation is applied to them.
 
 ## Gold values
 

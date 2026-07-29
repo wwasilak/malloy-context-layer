@@ -31,7 +31,61 @@ Also shipped, not in the original spec:
 |---|---|
 | `eval:gold` / `eval:check` | Gold values are computed from `gold_query` and written into the case, never typed. `eval:check` is the read-only CI form — verifies every case parses, every gold query still runs, and no committed value drifted, with no agent involved, so it can gate today. It immediately found two cases whose gold queries had never been executable. |
 | `eval:selftest` | The regressions must FAIL against a deliberately stripped `CLAUDE.md` and PASS against the real one. A suite that passes everything is indistinguishable from one that grades nothing. |
-| authored-vs-read grading | `must_not_contain` matches only text the agent WROTE; `must_use` matches everything it touched. Reading a binding's definition is not re-deriving it — `average_order_value` is literally defined as `total_sales / order_count`, so compile output echoes the forbidden pattern back at a correct agent. |
+| committed-vs-explored grading | `must_not_contain` matches only what the agent COMMITTED to (final answer + executed queries); `must_use` matches everything it touched. Reading a binding's definition is not re-deriving it — `average_order_value` is literally defined as `total_sales / order_count`, so compile output echoes the forbidden pattern back at a correct agent. Originally shipped as authored-vs-read, which still included compiles; narrowed to committed-vs-explored by EVAL-7. |
+
+## Phase 2b — fixes from the first sweep review (evidence: `evals/results/2026-07-28T17-35-59Z.jsonl`)
+
+Findings from reviewing the shipped harness against its own first full sweep
+(5 cases x 3 runs, 4/5 passed, $9.66, 6.5M tokens, 24.7 min). Ordered by
+priority: the first two distort the signal the loop exists to produce, so they
+come before anything else including performance.
+
+| Code | Item | Detail | Effort |
+|---|---|---|---|
+| EVAL-7 | `must_not_contain` scope — false positive — DONE | The only failing run (`no-rederivation-margin` run 3) is almost certainly a grader error: its final answer and BOTH executed queries use the governed binding (`product_performance -> { aggregate: margin }`); the forbidden pattern appears nowhere in either. It matched in `authoredText`, which also carries **compile-stage** tool inputs and intermediate prose — runs 1-2 made 3 Malloy calls, run 3 made 4, so one extra *compile* (explaining or testing an expression it then correctly discarded) failed the case. Exploration is not commitment. **Fix:** match `must_not_contain` against executed queries (`RUN_TOOLS`) + the final answer only; keep `must_use` searching the full trace. **Also:** record the matched snippet with ~200 chars of context in the result row — today the telemetry cannot adjudicate its own verdict. | done |
+| EVAL-8 | `last_validated` stamping poisons the identity signal — DONE | `run.js` writes the date into `kp/**` after a passing run; `identity.js` digests the `kp/` working tree. Every successful sweep therefore changes `semantic_identity`, and the next `eval:report` announces "the MEANING moved" when only a date moved — the exact false signal EVAL-6 exists to prevent. **Fix:** strip `last_validated:` lines in `treeDigest`, and exclude `kp/agent/gap-log.md` + `question-log.md` (appending a gap does not change meaning). Keep `examples.md` and `corrections.md` standing hints IN — those do. **Also fixed:** the `dirty` flag ignored the same files and any concept file whose only diff from HEAD is its stamp — a flag reporting drift the hash ignores is a second false signal. | done |
+| EVAL-9 | `subset` verdict is unsound | `containsAll` compares *flattened* value multisets, so gold values found anywhere in the agent's output pass: a gold scalar of `47` passes against any 200-row result that happens to contain a 47. **Fix:** column-aware containment (gold columns subset of agent columns, matched per key), or make `subset` opt-in per case instead of a default pass tier. The tier's rationale (agents legitimately return extra context) is right; the implementation is too loose. | 2 hrs |
+| EVAL-10 | `analysis` cases can be vacuous | `grade.js` returns `pass: true` for the kind and lets cross-checks decide, but `cases.js` never requires any. An `analysis` case with empty `must_use`, empty `must_not_contain` and no `expect_receipt` passes unconditionally, forever, while looking like coverage. **Fix:** load-time error when an `analysis` case carries no cross-check. | 30 min |
+| AGT-3 | Cheap refusal (protocol fix, found by telemetry) | `refusal-ungoverned` burns 18-24 turns and $0.76-0.91 per run to conclude a term is not governed — more than the case that actually computes a number, and the second most expensive case in the sweep. Every real user asking about an ungoverned term pays the same. **Fix:** one line in CLAUDE.md — *absence from the routing table is conclusive; do not explore the models to confirm a term is missing.* Add a `contains`-style assertion that the refusal is reached cheaply (cap `--max-turns` for that case, or assert `malloy_tool_calls <= 1`). Eval cost is a sensor for protocol waste. | 30 min |
+| EVAL-11 | Numeric extraction fragility (confirmed) | `aov-synonym` extracted via `currency` twice and `bold` once across three identical questions — it survived on the luck of answer ordering, and the first answer that leads with a different figure breaks it. **Fix (in order of preference):** prefer `query_shape` for anything that can be method-graded; where a number genuinely is the point, extract the figure nearest a case-specified label rather than the first match, and keep recording `how`. Do not bend CLAUDE.md into emitting a machine-readable fence just to suit the grader — that is the test changing the product. | 2 hrs |
+| EVAL-12 | Make the suite cheap enough to run on every PR | Today: serial, no caching, no tiering. 5 cases x 3 = 24.7 min / $9.66, which is ~2.5 h / ~$58 at the EVAL-5 target of 30 cases. Four independent levers, in leverage order: **(a) tiering** — most cases test a *decision*, not a trajectory: tier 0 (no LLM: gold compiles, every approved concept has a binding — belongs in `build.js`), tier 1 (one call, no tools: routing table + question -> "which concepts, what Malloy?", graded on `must_use`/`must_not_contain`/query shape, ~seconds), tier 2 (full agentic, only where multi-turn behaviour IS the test — self-verification, the projection case, logging discipline; ~5 of 30). The 21-turn refusal is the proof: 627k tokens to observe a turn-one decision. **(b) impact selection** — EVAL-6 identity is already a cache key: unchanged identity + unchanged case = unchanged result, so a PR runs only cases whose `must_use` intersects the changed concepts, plus last run's failures; full sweep nightly. **(c) prompt caching + Batch API** on the shared CLAUDE.md + routing-table prefix. **(d) `--concurrency`** — the boring 4x; runs are independent and the grader shares no state. **Invariant:** every cheap tier must be periodically validated against the expensive tier it replaces (correlation check in the nightly sweep), or you get a green suite over a wrong product. | 2-3 days |
+| EVAL-13 | Minor harness fixes | `ALLOWED_TOOLS` omits `mcp__claude_ai_Malloyyo__query` although `RUN_TOOLS` recognises it — Malloyyo runs would be blocked at the tool gate. `--live` still stamps `last_validated` from non-fixture data (stamp should be fixtures-only). `report.js` splits one diagnosis sentence across two `if` chains — correct output, maintenance trap. | 1 hr |
+
+**Not adopted from the "fastest eval ever" proposals** (recorded so they are not
+relitigated): a local quantized SLM as the CI agent — you ship Claude, and
+protocol behaviour is model-coupled, so an 8B model would pass rules Claude
+ignores and fail rules Claude follows; use a smaller model in the same family
+(Haiku) if a cheap LLM tier is wanted, and validate correlation. Strict AST
+equality as the primary query check — it is stricter than semantic equivalence
+(the two accepted margin queries in the real session have different trees and
+identical meaning), so use it only as a fast-path: identical AST -> pass, else
+escalate to execution. Vector/cosine routing as the *test* — it measures whether
+definitions are distinguishable in embedding space, not what the agent does; keep
+it as a build-time lint for concept pairs too similar to disambiguate (the "too
+similar" failure mode), never as a merge gate.
+
+
+## Phase 2c — Simplification (mostly a side effect of EVAL-12, not a refactor for its own sake)
+
+The harness is ~10 files. About half of that complexity exists for ONE reason:
+it grades a *trajectory* (free-form prose from a 20-turn subprocess) instead of
+a *decision*. Both bugs found in review (EVAL-7 scope, EVAL-11 extraction) live
+in exactly that code — they are the tax on the format, not sloppiness. Test at
+the level where the messy code is unnecessary and it deletes itself.
+
+**Do not do this as a standalone refactor.** SIMP-1 falls out of EVAL-12; the
+rest are small and opportunistic. What exists works and just produced a real
+finding about the protocol.
+
+| Code | Item | Detail | Trigger |
+|---|---|---|---|
+| SIMP-1 | Decision-grading deletes the trajectory layer | EVAL-12's tier 1 (one call, no tools, structured JSON out: "which concepts, what Malloy?") removes the need for stream-json parsing, tool-call extraction, authored-vs-trace splitting (`agent.js`) and the numeric regex ladder (`grade.js`) on most cases — along with both bug classes above. Keep the full agentic path only for the ~5 cases where multi-turn behaviour IS the test (self-verification, projection, logging discipline). | with EVAL-12 |
+| SIMP-2 | Report in Malloy, not JavaScript | Results are JSONL; DuckDB reads JSONL natively; we own a semantic layer. Replace `report.js` (~150 lines of hand-rolled grouping and diffing) with `evals/results.malloy`: measures for pass_rate, flakiness, cost_per_case, flips by category. Side effect: the agent can analyse its own eval history with the exact tool under test — dogfooding, and one fewer bespoke reporter to maintain. | opportunistic (small) |
+| SIMP-3 | One shared Malloy lib | `build.js` and `evals/lib/malloy.js` both implement "compile every model, index which file defines which source, run a query in the right model context". Duplicated logic with independent drift risk. Extract once, import twice. | next touch of either |
+| SIMP-4 | Tier-0 checks fold into `build.js` | "Gold queries compile", "every approved concept has a binding" is validation — which is what `build.js` already is, and it already gates PRs (OPS-1). Most of `eval:check` disappears into the existing gate instead of being a second one. | with EVAL-12 tier 0 |
+| SIMP-5 | `selftest` becomes a flag, not a file | It is "run 2 cases against a different protocol file": `run.js --protocol <path>`. Keep the idea — it is the best thing in the harness — delete the separate script and its backup/restore/SIGINT dance. | with SIMP-1 |
+| SIMP-6 | **Snapshot + diff instead of authored assertions** (the out-of-the-box one) | Replay-and-diff, not assert. Every `question-log.md` entry is already a real question with a real answer and the concepts it used; promote human-accepted ones into snapshots. The suite becomes: replay the last N accepted questions, diff each new answer against its snapshot, show a human only what MOVED — with `semantic_identity` saying whether the move was legitimate (a definition changed) or a regression (nothing changed but the number did). No `expect_kind`, no gold values, no extraction regex, no assertion vocabulary. The suite grows itself from production, which is what EVAL-5 currently asks humans to do by hand. **Caveats:** snapshots enshrine yesterday's answer as truth — only human-ACCEPTED answers become snapshots, and a filed correction overwrites one; and diff the STRUCTURED part (concepts used, executed Malloy, headline figure), never the prose, or the noise buries the signal. **Keep assertion cases** for the handful of things worth pinning hard: refusals, membership rules, the two known regressions. | hand-authoring toward ~30 cases starts to feel like the bottleneck |
+
 
 ## Phase 3 — Server adoption (Publisher or Malloyyo; pick one)
 
@@ -93,5 +147,16 @@ exploration.
 
 ## Order of operations
 
-Phase 1 this week → EVAL-1..3 next → pick a server, INT-1/INT-2 first (both
-runtime-independent-ish), then INT-3 → everything else on trigger.
+Phase 1 → DONE. Phase 2 (eval loop) → DONE and running.
+EVAL-7 and EVAL-8 → DONE (the signal-distorting pair; measurements from here on
+are trustworthy).
+**Now:** the rest of Phase 2b in listed order — EVAL-9/EVAL-10 (soundness), then
+AGT-3 (30 min, wins in production as well as in the suite), then EVAL-11, then
+EVAL-12 (performance; concurrency is the cheap 4x, tiering is the real 20x).
+**Then:** pick a server — INT-1/INT-2 first (both runtime-independent), then
+INT-3a or INT-3b with INT-6.
+**Continuously:** EVAL-5 harvesting toward ~30 cases; every correction filed gets
+an eval case in the same PR.
+**On trigger only:** Phase 2c (simplification — SIMP-1/4/5 ride along with
+EVAL-12, SIMP-2/3 are opportunistic, SIMP-6 when authoring cases becomes the
+bottleneck), Phase 3b and Phase 4.

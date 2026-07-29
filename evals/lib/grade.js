@@ -12,6 +12,13 @@
 //        because an answer can carry the right number and still be wrong: a
 //        re-derived margin agrees with the governed one today and diverges the
 //        day the definition changes.
+//
+//   The two cross-checks search DIFFERENT text, and the asymmetry is the whole
+//   point (EVAL-7): must_use searches everything the run touched, because
+//   reaching for a concept counts however it shows up; must_not_contain searches
+//   only what the agent COMMITTED to — its final answer and the queries it
+//   actually executed. Exploration is not commitment. A compile of an expression
+//   the agent then correctly discards is the loop working, not a violation.
 // =============================================================================
 const { compareResults } = require('./malloy');
 
@@ -20,6 +27,53 @@ const { compareResults } = require('./malloy');
 // `sum(line_revenue-line_cost)` are the same mistake and must both be caught.
 const squash = (s) => String(s || '').replace(/\s+/g, '').toLowerCase();
 const containsLoose = (hay, needle) => squash(hay).includes(squash(needle));
+
+// Squash while remembering where each surviving character came from, so a loose
+// match can be reported back with its ORIGINAL surrounding text.
+function squashWithMap(s) {
+  const str = String(s || '');
+  let squashed = '';
+  const map = [];
+  for (let i = 0; i < str.length; i++) {
+    if (/\s/.test(str[i])) continue;
+    squashed += str[i].toLowerCase();
+    map.push(i);
+  }
+  return { str, squashed, map };
+}
+
+// Locate a loose match and return the matched span plus surrounding context.
+// Without this the telemetry cannot adjudicate its own verdict: a
+// must_not_contain failure said only WHICH pattern matched, never where or in
+// what — which is exactly what made the first sweep's one failure take a manual
+// re-read to disprove.
+function findLoose(hay, needle, pad = 100) {
+  const { str, squashed, map } = squashWithMap(hay);
+  const n = squash(needle);
+  if (!n) return null;
+  const idx = squashed.indexOf(n);
+  if (idx === -1) return null;
+
+  const start = map[idx];
+  const end = map[idx + n.length - 1] + 1;
+  const from = Math.max(0, start - pad);
+  const to = Math.min(str.length, end + pad);
+  const ellipsis = (cond, s) => (cond ? '…' + s : s);
+
+  return {
+    match: str.slice(start, end),
+    context: ellipsis(from > 0, str.slice(from, to).replace(/\s+/g, ' ').trim()) + (to < str.length ? '…' : ''),
+  };
+}
+
+// What the agent COMMITTED to, labelled so a match points at an artifact rather
+// than at an undifferentiated blob of trace.
+function committedSegments(run) {
+  return [
+    { where: 'final_answer', text: run.answer || '' },
+    ...(run.executedMalloy || []).map((q, i) => ({ where: `executed_malloy[${i}]`, text: q })),
+  ];
+}
 
 // The AGT-1 provenance footer.
 const RECEIPT_RE = /basis\s*:.*\|\s*freshness\s*:/is;
@@ -159,20 +213,38 @@ function crossChecks(caseDef, run) {
   // must_use searches everything the run touched — reaching for a concept
   // counts whether it shows up in prose, in a query, or in what a tool returned.
   const trace = run.traceText || '';
-  // must_not_contain searches only what the agent AUTHORED. Reading a binding's
-  // definition is not re-deriving it: `average_order_value` is defined in the
-  // model as `total_sales / order_count`, so compile output echoes that
-  // expression back to an agent that did exactly the right thing.
-  const authored = run.authoredText || run.traceText || '';
+  // must_not_contain searches only the COMMITTED artifacts: the final answer and
+  // the queries that actually ran. Not intermediate prose and not compiles —
+  // testing an expression and discarding it is the agent working correctly, and
+  // grading it as a violation fails a run for thinking. Reading a binding's
+  // definition is likewise not re-deriving it: `average_order_value` is defined
+  // in the model as `total_sales / order_count`, so compile output echoes the
+  // forbidden expression back at an agent that did exactly the right thing.
+  const committed = committedSegments(run);
 
   for (const uri of caseDef.must_use) {
-    if (!containsLoose(trace, uri)) failures.push(`must_use not referenced anywhere in trace: ${uri}`);
+    if (!containsLoose(trace, uri))
+      failures.push({ check: 'must_use', pattern: uri, message: `must_use not referenced anywhere in trace: ${uri}` });
   }
+
   for (const pat of caseDef.must_not_contain) {
-    if (containsLoose(authored, pat)) failures.push(`must_not_contain matched in agent-authored text: ${pat}`);
+    for (const seg of committed) {
+      const hit = findLoose(seg.text, pat);
+      if (!hit) continue;
+      failures.push({
+        check: 'must_not_contain',
+        pattern: pat,
+        where: seg.where,
+        matched: hit.match,
+        context: hit.context,
+        message: `must_not_contain matched in ${seg.where}: ${pat}`,
+      });
+      break; // one report per pattern is enough to fail it
+    }
   }
+
   if (caseDef.expect_receipt && !hasReceipt(run.answer))
-    failures.push('missing AGT-1 provenance receipt (Basis: … | Freshness: …)');
+    failures.push({ check: 'expect_receipt', message: 'missing AGT-1 provenance receipt (Basis: … | Freshness: …)' });
 
   return failures;
 }
@@ -181,7 +253,7 @@ function crossChecks(caseDef, run) {
 // ctx: { runQuery(text) -> {rows} }
 async function grade(caseDef, run, ctx) {
   if (run.error && !run.answer)
-    return { pass: false, detail: `agent run failed: ${run.error}`, extracted: null, receipt_present: false };
+    return { pass: false, detail: `agent run failed: ${run.error}`, extracted: null, receipt_present: false, cross_checks: [] };
 
   let kindResult;
   let extracted = null;
@@ -226,9 +298,12 @@ async function grade(caseDef, run, ctx) {
 
   const xs = crossChecks(caseDef, run);
   const pass = kindResult.pass && xs.length === 0;
-  const detail = [kindResult.detail, ...xs].filter(Boolean).join(' | ');
+  const detail = [kindResult.detail, ...xs.map((x) => x.message)].filter(Boolean).join(' | ');
 
-  return { pass, detail, extracted, receipt_present: hasReceipt(run.answer) };
+  return { pass, detail, extracted, receipt_present: hasReceipt(run.answer), cross_checks: xs };
 }
 
-module.exports = { grade, extractNumber, hasReceipt, crossChecks, containsLoose, withinTolerance, REFUSAL_MARKERS };
+module.exports = {
+  grade, extractNumber, hasReceipt, crossChecks, containsLoose, findLoose,
+  committedSegments, withinTolerance, REFUSAL_MARKERS,
+};

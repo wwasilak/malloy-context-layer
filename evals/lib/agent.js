@@ -123,8 +123,10 @@ function extract(messages) {
 
   const answer = final != null ? final : textParts.join('\n\n');
 
-  // What the agent WROTE: its prose plus the queries it authored. Nothing it
-  // merely read.
+  // What the agent WROTE: its prose plus every query it authored, compiles
+  // included. Kept for debugging a trace; NOT the must_not_contain surface —
+  // that grades `answer` + `executedMalloy` only (see grade.js, EVAL-7), because
+  // an expression compiled and then discarded was never committed to.
   const authoredText = [
     answer,
     ...textParts,
@@ -133,12 +135,6 @@ function extract(messages) {
 
   // Everything, including what came BACK from tools. A concept can be reached
   // for in a query without being named in the prose, so must_use searches here.
-  //
-  // must_not_contain must NOT search here, and the distinction is not academic:
-  // `average_order_value` is DEFINED in the model as `total_sales /
-  // order_count`, so any compile output echoes that expression back. Grading a
-  // forbidden pattern against tool results marks an agent that correctly
-  // inspected the binding as having re-derived it.
   const traceText = [authoredText, ...resultParts].join('\n');
 
   const tokens = usage
