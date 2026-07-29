@@ -75,6 +75,8 @@ function loadCase(file) {
     errors.push(`contains case needs a non-empty expect_contains`);
   if (d.min_match != null && !MATCH_TIERS.has(String(d.min_match)))
     errors.push(`unknown min_match '${d.min_match}' (expected: ${[...MATCH_TIERS].join(' | ')})`);
+  if (d.max_malloy_calls != null && !(Number.isInteger(d.max_malloy_calls) && d.max_malloy_calls >= 0))
+    errors.push(`max_malloy_calls must be a non-negative integer (found '${d.max_malloy_calls}')`);
 
   // EVAL-10: an `analysis` case has no gold artifact — the cross-checks ARE the
   // grade. With none of them set it passes unconditionally, forever, while
@@ -105,6 +107,10 @@ function loadCase(file) {
     expect_receipt: d.expect_receipt === true,
     // weakest acceptable result-set match for query_shape (EVAL-9)
     min_match: d.min_match ? String(d.min_match) : DEFAULT_MATCH,
+    // AGT-3: cap the Malloy tool calls a case may spend. Cost is a behavioural
+    // assertion where the right answer is a DECISION — routing a term that is
+    // not governed needs no query at all.
+    max_malloy_calls: d.max_malloy_calls == null ? null : Number(d.max_malloy_calls),
     gold_query: d.gold_query || null,
     gold_runs: goldRuns,
     errors,

@@ -251,6 +251,19 @@ function crossChecks(caseDef, run) {
   if (caseDef.expect_receipt && !hasReceipt(run.answer))
     failures.push({ check: 'expect_receipt', message: 'missing AGT-1 provenance receipt (Basis: … | Freshness: …)' });
 
+  // AGT-3: where the correct answer is a routing DECISION, spending queries on
+  // it is itself the failure. Eval cost is a sensor for protocol waste — every
+  // real user asking the same question pays what this case pays.
+  if (caseDef.max_malloy_calls != null) {
+    const spent = run.malloy_tool_calls ?? 0;
+    if (spent > caseDef.max_malloy_calls)
+      failures.push({
+        check: 'max_malloy_calls',
+        message: `spent ${spent} Malloy tool call(s), budget is ${caseDef.max_malloy_calls} — ` +
+          `the answer should be reachable without querying the models`,
+      });
+  }
+
   return failures;
 }
 

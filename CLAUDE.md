@@ -2,7 +2,7 @@
 owner: Knowledge Plane
 status: approved
 approved_by: Knowledge Plane
-timestamp: 2026-07-24
+timestamp: 2026-07-29
 ---
 
 # Working with the Knowledge Plane + Malloy models
@@ -94,6 +94,13 @@ window, a ratio, or a needed join are NOT reasons to abandon a governed
 binding. They are reasons to navigate to it.
 
 ## When a term is NOT in the routing table
+
+**Absence from the routing table is conclusive.** The table lists every governed
+concept; a term that is not in it (and not a synonym of one) is not governed.
+Do NOT search, describe or compile the models to confirm a gap — no amount of
+model inspection can make an ungoverned term governed, so it costs turns and
+cannot change the answer. Inspect a source only to COMPUTE an exploratory figure
+you have already decided to offer.
 
 - If it is a **business metric or entity** someone might govern (e.g. "customer
   lifetime value"): say it is not governed, optionally compute an exploratory

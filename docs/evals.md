@@ -49,6 +49,7 @@ must_not_contain: ["total_sales / order_count"]
 expect_receipt: true         # assert the AGT-1 provenance footer
 min_match: subset            # query_shape: weakest acceptable result-set match
                              # subset (default) | values | exact
+max_malloy_calls: 0          # cap the Malloy tool calls the case may spend
 gold_query: |                # the verified Malloy behind the gold value
   run: ...
 ```
@@ -74,6 +75,24 @@ An `analysis` case with none of the three cross-checks set is **a load-time
 error** (EVAL-10): with no gold artifact and nothing to cross-check, it would
 pass unconditionally, forever, while looking like coverage. A test that cannot
 fail is worse than no test — it reports confidence it never earned.
+
+### Cost as an assertion (AGT-3)
+
+`max_malloy_calls: <n>` fails a run that spends more than `n` Malloy tool calls.
+Use it where the correct answer is a **decision** rather than a computation:
+`refusal-routing-decision` asks only whether a term is governed, and the routing
+table settles that without a single query, so its budget is `0`.
+
+The point is not to make the suite cheaper — it is that eval cost is a sensor
+for protocol waste. Every real user asking the same question pays what the case
+pays. The first sweep is what surfaced this: `refusal-ungoverned` spent 18–24
+turns and $0.76–0.91 per run.
+
+Read that number carefully, though. Most of it was the *exploratory computation*
+CLAUDE.md explicitly sanctions for an ungoverned term (tier 3) — legitimate
+spend, not waste — which is why the budget lives on a separate, computation-free
+case instead of on `refusal-ungoverned`. Do not put a call budget on a case
+whose right answer includes a number.
 
 **`must_use` and `must_not_contain` run for every kind**, and they are the part
 that catches the failures actually seen in real sessions. An answer can carry
