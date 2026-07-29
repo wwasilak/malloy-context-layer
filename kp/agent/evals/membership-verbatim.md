@@ -4,6 +4,17 @@ title: Membership rule applied verbatim
 category: membership
 question: "How many active customers do we have?"
 expect_kind: query_shape
+# EVAL-12a: tier 2, and this case is why the tier-1 criterion is what it is.
+# Tried at tier 1 and it failed where tier 2 passes: with only the routing
+# table, the agent wrote `aggregate: is_active_customer`, but that binding is a
+# BOOLEAN measure (made_an_order.count() {...} > 0), so aggregating it at the
+# top grain asks "did anyone order?" rather than "how many customers are
+# active". The query runs, so no compile-repair round can catch it — it is a
+# wrong decision, correctly graded as one. Reaching the right grain needs the
+# measure's TYPE, which lives in the source, not in the table. Tier 1 is for
+# bindings you can aggregate directly; anything whose grain must be inspected
+# stays tier 2.
+tier: 2
 gold_query: |
   run: customer_order_in_context -> {
     group_by: CustomerKey

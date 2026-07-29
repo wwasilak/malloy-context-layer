@@ -4,6 +4,8 @@ title: AOV synonym resolution
 category: synonym
 question: "What was the AOV in 2023?"
 expect_kind: query_shape
+# EVAL-12a: A synonym resolves to a binding on turn one; nothing here needs a second turn.
+tier: 1
 gold_query: "run: sales_performance -> { aggregate: average_order_value; where: DT.year = @2023 }"
 must_use: kp:AverageOrderValue
 must_not_contain: ["total_sales/order_count", "total_sales / order_count"]

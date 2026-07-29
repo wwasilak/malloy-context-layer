@@ -24,6 +24,7 @@ const path = require('path');
 const { loadCases } = require('./lib/cases');
 const mal = require('./lib/malloy');
 const { ask, AGENT_BIN } = require('./lib/agent');
+const { askTier1 } = require('./lib/tier1');
 const { grade } = require('./lib/grade');
 const { semanticIdentity } = require('./lib/identity');
 const { setFrontmatterField } = require('./lib/stamp');
@@ -37,6 +38,7 @@ function parseArgs(argv) {
   const a = {
     case: null, live: false, model: null, runs: 3, quorum: null,
     timeout: 300000, stamp: !process.env.CI, maxTurns: 30, rowLimit: 200, quiet: false,
+    tier: null,   // null = each case runs in the lane it declares
   };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
@@ -48,6 +50,7 @@ function parseArgs(argv) {
     else if (k === '--quorum') a.quorum = parseInt(next(), 10);
     else if (k === '--timeout') a.timeout = parseInt(next(), 10) * 1000;
     else if (k === '--max-turns') a.maxTurns = parseInt(next(), 10);
+    else if (k === '--tier') a.tier = parseInt(next(), 10);
     else if (k === '--stamp') a.stamp = true;
     else if (k === '--no-stamp') a.stamp = false;
     else if (k === '--quiet') a.quiet = true;
@@ -55,6 +58,7 @@ function parseArgs(argv) {
     else throw new Error(`unknown flag: ${k}`);
   }
   if (!Number.isFinite(a.runs) || a.runs < 1) throw new Error('--runs must be >= 1');
+  if (a.tier != null && a.tier !== 1 && a.tier !== 2) throw new Error('--tier must be 1 or 2');
   // EVAL-13: `last_validated` claims a governed answer was verified against the
   // committed fixtures. A --live run measures drift against data nobody has
   // pinned, so it must never write that claim back into kp/ — not even when
@@ -76,7 +80,11 @@ eval runner (EVAL-1)
   --runs <n>         runs per case (default 3)
   --quorum <n>       passing runs required (default: all of them)
   --timeout <sec>    per-run timeout (default 300)
-  --max-turns <n>    agent turn cap (default 30)
+  --max-turns <n>    agent turn cap (default 30, tier 2 only)
+  --tier <1|2>       force every case into one lane, overriding what it
+                     declares. Tier 1 is one call with no tools; tier 2 is the
+                     full agentic run. Used by the correlation check to run the
+                     same case both ways.
   --no-stamp         do not write last_validated (implied by CI and by --live)
   --quiet            summary only
 `);
@@ -121,7 +129,9 @@ const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').replace(/-\d{
     }
   } catch { /* non-fatal: provenance detail, not a gate */ }
 
-  console.log(`Eval: ${cases.length} case(s) x ${args.runs} run(s), quorum ${args.quorum}/${args.runs}`);
+  const laneOf = (c) => args.tier ?? c.tier;
+  const lanes = `${cases.filter((c) => laneOf(c) === 1).length} tier-1, ${cases.filter((c) => laneOf(c) === 2).length} tier-2`;
+  console.log(`Eval: ${cases.length} case(s) x ${args.runs} run(s), quorum ${args.quorum}/${args.runs} (${lanes}${args.tier ? ', forced' : ''})`);
   console.log(`Agent: ${AGENT_BIN}${args.model ? ' (' + args.model + ')' : ''} | data: ${dataSource}`);
   console.log(`Semantic identity: ${ident.semantic_identity.slice(0, 23)}…${ident.components.dirty ? ' (working tree dirty)' : ''}`);
   console.log('');
@@ -134,6 +144,7 @@ const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').replace(/-\d{
   write({
     kind: 'run_meta', ts: new Date().toISOString(), cases: cases.length, runs: args.runs,
     quorum: args.quorum, model_id: args.model || 'default', agent: AGENT_BIN,
+    tier_override: args.tier ?? null,
     data_source: dataSource, semantic_identity: ident.semantic_identity,
     identity_components: ident.components, runtime: versions,
   });
@@ -161,11 +172,22 @@ const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').replace(/-\d{
   const caseResults = [];
   for (const c of cases) {
     const runs = [];
+    // Which lane. `--tier` overrides so the correlation check can run a
+    // tier-1 case through tier 2 and compare verdicts.
+    const tier = args.tier ?? c.tier;
     for (let i = 1; i <= args.runs; i++) {
-      const res = await ask({
-        question: c.question, model: args.model,
-        maxTurns: args.maxTurns, timeoutMs: args.timeout,
-      });
+      const res = tier === 1
+        ? await askTier1({
+          question: c.question, model: args.model, timeoutMs: args.timeout,
+          // the repair round compiles against the SAME executor the grade uses
+          validate: async (q) => {
+            try { await ctx.runQuery(q); return null; } catch (e) { return e.message || String(e); }
+          },
+        })
+        : await ask({
+          question: c.question, model: args.model,
+          maxTurns: args.maxTurns, timeoutMs: args.timeout,
+        });
       let g;
       try {
         g = await grade(c, res, ctx);
@@ -181,6 +203,16 @@ const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').replace(/-\d{
         run: i,
         pass: g.pass,
         expect_kind: c.expect_kind,
+        // which lane produced this row, and whether it was forced (EVAL-12a).
+        // A pass rate is not comparable across tiers, so the tier has to travel
+        // with the row or the report will average two different measurements.
+        tier,
+        tier_declared: c.tier,
+        tier1_concepts: res.tier1_concepts || null,
+        // repair rounds spent (tier 1). Always needing one is a signal about
+        // the protocol's dialect guidance, not about the harness.
+        repairs: res.repairs ?? null,
+        last_compile_error: res.last_compile_error || null,
         grade_detail: g.detail,
         agent_answer_excerpt: String(res.answer || '').slice(0, 1200),
         executed_malloy: (res.executedMalloy || []).join('\n---\n').slice(0, 4000),
@@ -196,6 +228,19 @@ const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').replace(/-\d{
         tool_calls: (res.toolCalls || []).length,
         malloy_tool_calls: res.malloy_tool_calls ?? null,
         tokens: res.tokens,
+        // The breakdown, not just the total. Tier 1 cut tokens 7-14x but cost
+        // only ~2x, and the reason is only visible here: a long tier-2 session
+        // READS its cached prefix, while every tier-1 run is a fresh process
+        // that CREATES one. Without this split the next person re-derives that
+        // from scratch.
+        usage: res.usage
+          ? {
+            input: res.usage.input_tokens ?? null,
+            output: res.usage.output_tokens ?? null,
+            cache_read: res.usage.cache_read_input_tokens ?? null,
+            cache_creation: res.usage.cache_creation_input_tokens ?? null,
+          }
+          : null,
         cost_usd: res.cost_usd ?? null,
         latency_ms: res.latency_ms,
         num_turns: res.num_turns ?? null,
@@ -212,8 +257,8 @@ const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').replace(/-\d{
 
     const passed = runs.filter(Boolean).length;
     const casePass = passed >= args.quorum;
-    caseResults.push({ name: c.name, category: c.category, pass: casePass, passed, total: args.runs, must_use: c.must_use });
-    console.log(`${casePass ? 'PASS' : 'FAIL'}  ${c.name} (${passed}/${args.runs})`);
+    caseResults.push({ name: c.name, category: c.category, pass: casePass, passed, total: args.runs, must_use: c.must_use, tier });
+    console.log(`${casePass ? 'PASS' : 'FAIL'}  ${c.name} (${passed}/${args.runs}) [tier ${tier}]`);
   }
 
   // Wait for the flush. process.exit() below would otherwise discard whatever

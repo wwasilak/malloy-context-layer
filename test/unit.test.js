@@ -23,6 +23,8 @@ const {
   compareResults, containsAll, stripImports, referencedSource, resolveModelFor,
 } = require('../evals/lib/malloy');
 const { definedIn, listModelFiles } = require('../malloy-lib');
+const { parseJsonBlock, toRun, buildPrompt, buildRepairPrompt } = require('../evals/lib/tier1');
+const { loadCase, DEFAULT_TIER } = require('../evals/lib/cases');
 
 // ---- porcelainPaths (EVAL-8 regression) -------------------------------------
 // `git status --porcelain` emits `XY PATH`. X or Y is very often a space, so
@@ -184,4 +186,83 @@ test('listModelFiles is sorted, so compile order is platform-independent', () =>
   assert.ok(files.length > 0, 'expected models/*.malloy to exist');
   assert.deepStrictEqual(files, [...files].sort());
   assert.ok(files.every((f) => f.endsWith('.malloy')));
+});
+
+// ---- tier 1 (EVAL-12a / SIMP-1) ---------------------------------------------
+// The whole reason tier 1 is cheap is that its output is structured. If the
+// parse is loose, the tier grades noise; if it is brittle, it fails correct
+// answers over punctuation.
+test('parseJsonBlock reads a fenced json block', () => {
+  const { data, error } = parseJsonBlock('Here you go:\n```json\n{"concepts":["kp:X"],"malloy":null}\n```\n');
+  assert.strictEqual(error, null);
+  assert.deepStrictEqual(data.concepts, ['kp:X']);
+});
+
+test('parseJsonBlock falls back to a bare object', () => {
+  const { data, error } = parseJsonBlock('{"concepts":[],"governed":false}');
+  assert.strictEqual(error, null);
+  assert.strictEqual(data.governed, false);
+});
+
+test('parseJsonBlock reports failure rather than returning empty', () => {
+  const { data, error } = parseJsonBlock('I cannot answer that.');
+  assert.strictEqual(data, null);
+  assert.match(error, /no parseable JSON/);
+});
+
+test('toRun maps a structured reply onto the shape grade.js consumes', () => {
+  const run = toRun({
+    concepts: ['kp:AverageOrderValue'],
+    malloy: 'run: sales_performance -> { aggregate: average_order_value }',
+    answer: 'AOV was $12.50. Basis: kp:AverageOrderValue | Freshness: 2024-04-20 | Steward: sales',
+  }, 'raw');
+  assert.deepStrictEqual(run.executedMalloy, ['run: sales_performance -> { aggregate: average_order_value }']);
+  assert.strictEqual(run.malloy_tool_calls, 1);
+  assert.match(run.traceText, /kp:AverageOrderValue/);
+  assert.match(run.answer, /Basis:/);
+});
+
+test('toRun counts a proposed query as a Malloy call, so AGT-3 keeps its meaning', () => {
+  // refusal-routing-decision budgets max_malloy_calls: 0. Proposing a query to
+  // answer a pure routing question is still spending one.
+  assert.strictEqual(toRun({ concepts: [], malloy: null, answer: 'not governed' }, '').malloy_tool_calls, 0);
+  assert.strictEqual(toRun({ concepts: [], malloy: 'run: x -> { aggregate: y }', answer: '' }, '').malloy_tool_calls, 1);
+});
+
+test('toRun survives an unparseable reply without inventing content', () => {
+  const run = toRun(null, 'the model said something else');
+  assert.strictEqual(run.answer, 'the model said something else');
+  assert.deepStrictEqual(run.executedMalloy, []);
+  assert.strictEqual(run.malloy_tool_calls, 0);
+});
+
+test('the tier-1 prompt carries the routing table and states the binding notation', () => {
+  const p = buildPrompt({ question: 'What was the AOV in 2023?', routingTable: '| Concept | Binding |' });
+  assert.match(p, /NO TOOLS/);
+  assert.match(p, /\| Concept \| Binding \|/);
+  assert.match(p, /What was the AOV in 2023\?/);
+  // the notation note that stops `run: sales.sales_performance`
+  assert.match(p, /Do not prefix the source with the model name/);
+});
+
+test('the repair prompt restates context and carries the compiler error', () => {
+  const p = buildRepairPrompt({
+    question: 'q', routingTable: 'TABLE', previous: '{"malloy":"run: x"}',
+    error: 'Aggregate expressions are not allowed in `where:`; use `having:`',
+  });
+  assert.match(p, /TABLE/);                       // stateless: full context restated
+  assert.match(p, /Aggregate expressions are not allowed/);
+  assert.match(p, /dialect correction, not a re-think/);
+});
+
+// ---- case tiers --------------------------------------------------------------
+test('a case defaults to tier 2, so nothing becomes cheap by accident', () => {
+  assert.strictEqual(DEFAULT_TIER, 2);
+  const c = loadCase('kp/agent/evals/no-rederivation-margin.md');
+  assert.strictEqual(c.tier, 2);
+});
+
+test('a declared tier is honoured, and an unknown one is an error', () => {
+  assert.strictEqual(loadCase('kp/agent/evals/aov-synonym.md').tier, 1);
+  assert.strictEqual(loadCase('kp/agent/evals/membership-verbatim.md').tier, 2);
 });

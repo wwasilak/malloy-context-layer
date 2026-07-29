@@ -26,6 +26,17 @@ const EXPECT_KINDS = new Set(['numeric', 'refusal', 'contains', 'query_shape', '
 const MATCH_TIERS = new Set(['subset', 'values', 'exact']);
 const DEFAULT_MATCH = 'subset';
 
+// How the case is EXECUTED (EVAL-12a):
+//   1 — one call, no tools, structured JSON. The case tests a DECISION:
+//       which concepts, what query. Seconds, and no trajectory to parse.
+//   2 — full agentic run. Only where multi-turn behaviour IS the test:
+//       self-verification, iterating on a compile error, logging discipline.
+// Default 2, deliberately: a case is only cheap once someone has decided it
+// can be, and silently demoting existing cases would change what they test
+// without anyone choosing that.
+const RUN_TIERS = new Set([1, 2]);
+const DEFAULT_TIER = 2;
+
 const DEFAULT_TOLERANCE = 0.005;
 
 // accept "kp:A, kp:B", ["kp:A"], or absent -> always an array
@@ -77,6 +88,8 @@ function loadCase(file) {
     errors.push(`unknown min_match '${d.min_match}' (expected: ${[...MATCH_TIERS].join(' | ')})`);
   if (d.max_malloy_calls != null && !(Number.isInteger(d.max_malloy_calls) && d.max_malloy_calls >= 0))
     errors.push(`max_malloy_calls must be a non-negative integer (found '${d.max_malloy_calls}')`);
+  if (d.tier != null && !RUN_TIERS.has(Number(d.tier)))
+    errors.push(`unknown tier '${d.tier}' (expected: ${[...RUN_TIERS].join(' | ')})`);
 
   // EVAL-10: an `analysis` case has no gold artifact — the cross-checks ARE the
   // grade. With none of them set it passes unconditionally, forever, while
@@ -111,6 +124,8 @@ function loadCase(file) {
     // assertion where the right answer is a DECISION — routing a term that is
     // not governed needs no query at all.
     max_malloy_calls: d.max_malloy_calls == null ? null : Number(d.max_malloy_calls),
+    // execution lane (EVAL-12a) — see RUN_TIERS
+    tier: d.tier == null ? DEFAULT_TIER : Number(d.tier),
     gold_query: d.gold_query || null,
     gold_runs: goldRuns,
     errors,
@@ -138,4 +153,5 @@ function loadCases(dir = EVALS_DIR, filter = null) {
 module.exports = {
   loadCases, loadCase, splitRuns, toList,
   EVALS_DIR, EXPECT_KINDS, DEFAULT_TOLERANCE, MATCH_TIERS, DEFAULT_MATCH,
+  RUN_TIERS, DEFAULT_TIER,
 };

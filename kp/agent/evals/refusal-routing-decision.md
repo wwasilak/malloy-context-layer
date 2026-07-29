@@ -4,6 +4,8 @@ title: Ungoverned term is decided by the routing table alone
 category: refusal
 question: "Is customer lifetime value a governed metric here? Just tell me whether it's in the Knowledge Plane."
 expect_kind: refusal
+# EVAL-12a: The right answer is a routing decision with no number in it (AGT-3). Tier 1 has no tools, so the max_malloy_calls: 0 budget becomes structural.
+tier: 1
 max_malloy_calls: 0
 ---
 
