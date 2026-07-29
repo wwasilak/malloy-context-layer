@@ -122,10 +122,23 @@ matched (`final_answer` or `executed_malloy[i]`), the matched text, and ~200
 characters of surrounding context — a verdict that cannot be adjudicated from
 its own row costs a manual transcript re-read.
 
-Prefer `query_shape` over `numeric` for anything time-relative — see anchoring
-below. Prefer `analysis` when several output shapes are equally correct;
-`query_shape` on an open-ended question marks correct variants as failures, and
-a suite that fails correct behaviour gets ignored.
+**Prefer `query_shape` over `numeric` wherever the method can be graded**
+(EVAL-11) — not only for time-relative questions. `numeric` grades the number in
+the *prose*, which means parsing free text with a regex ladder: `aov-synonym`
+extracted its figure via `currency` twice and `bold` once across three identical
+questions, surviving on the luck of answer ordering. `query_shape` reads the
+number from the executed query, where it is stated exactly. The right fix for a
+fragile extraction is a better grading kind, not a better regex — and CLAUDE.md
+must not be bent into emitting a machine-readable fence to suit the grader, as
+that is the test changing the product.
+
+No case currently uses `numeric`. The kind and its extractor remain for the case
+where a number genuinely is the point and no query can be re-run, but they are
+unexercised by the suite and are candidates for deletion under SIMP-1.
+
+Prefer `analysis` when several output shapes are equally correct; `query_shape`
+on an open-ended question marks correct variants as failures, and a suite that
+fails correct behaviour gets ignored.
 
 ## Anchored ground truth (EVAL-2)
 
@@ -283,7 +296,10 @@ date. The field means "a governed answer through this concept was verified on
 this date", not "somebody looked at it".
 
 Stamping is skipped automatically when `CI` is set, and can be disabled with
-`--no-stamp`. Frontmatter is edited surgically (one field, regex on the
+`--no-stamp`. It is also suppressed unconditionally under `--live`, including
+when `--stamp` is passed explicitly: the field claims a governed answer was
+verified against the **committed fixtures**, and a live run measures drift
+against data nobody has pinned. Frontmatter is edited surgically (one field, regex on the
 frontmatter block) rather than round-tripped through a YAML serialiser, which
 would reformat quoting and key order across the bundle and trip the OPS-1
 dirty-tree gate for reasons unrelated to the change.

@@ -19,10 +19,18 @@ const { spawn } = require('child_process');
 
 const AGENT_BIN = process.env.EVAL_AGENT_BIN || 'claude';
 
+// The Malloyyo tools are here because RUN_TOOLS already recognises
+// `mcp__claude_ai_Malloyyo__query`: without them a Malloyyo-backed sweep would
+// be blocked at the tool gate and every case would fail for a reason that has
+// nothing to do with the protocol. `describe_source` / `list_sources` come with
+// it — CLAUDE.md requires inspect-before-run, so allowing the query alone would
+// leave the runtime broken in a different way.
 const ALLOWED_TOOLS = [
   'Read', 'Glob', 'Grep',
   'mcp__malloy__compile', 'mcp__malloy__compile_file', 'mcp__malloy__run',
   'mcp__malloy__run_file', 'mcp__malloy__language_help', 'mcp__malloy__list_runs',
+  'mcp__claude_ai_Malloyyo__query', 'mcp__claude_ai_Malloyyo__describe_source',
+  'mcp__claude_ai_Malloyyo__list_sources',
 ];
 const DISALLOWED_TOOLS = ['Write', 'Edit', 'NotebookEdit', 'Bash'];
 

@@ -55,6 +55,11 @@ function parseArgs(argv) {
     else throw new Error(`unknown flag: ${k}`);
   }
   if (!Number.isFinite(a.runs) || a.runs < 1) throw new Error('--runs must be >= 1');
+  // EVAL-13: `last_validated` claims a governed answer was verified against the
+  // committed fixtures. A --live run measures drift against data nobody has
+  // pinned, so it must never write that claim back into kp/ — not even when
+  // --stamp was passed explicitly.
+  if (a.live && a.stamp) { a.stamp = false; a.stampSuppressed = true; }
   // default: unanimity. A case that only passes sometimes is not passing.
   if (a.quorum == null) a.quorum = a.runs;
   if (a.quorum > a.runs) throw new Error('--quorum cannot exceed --runs');
@@ -72,7 +77,7 @@ eval runner (EVAL-1)
   --quorum <n>       passing runs required (default: all of them)
   --timeout <sec>    per-run timeout (default 300)
   --max-turns <n>    agent turn cap (default 30)
-  --no-stamp         do not write last_validated (implied when CI is set)
+  --no-stamp         do not write last_validated (implied by CI and by --live)
   --quiet            summary only
 `);
 }
@@ -251,6 +256,7 @@ const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').replace(/-\d{
   for (const [cat, v] of Object.entries(byCat).sort())
     console.log(`  ${cat.padEnd(16)} ${v.p}/${v.n}`);
   if (args.stamp) console.log(`last_validated stamped on ${stamped} concept file(s)`);
+  else if (args.stampSuppressed) console.log('last_validated NOT stamped — --live data is not the pinned fixtures');
   console.log(`Results: ${outFile}`);
 
   const unaudited = cases.filter((c) => c._gold_source === 'computed-at-runtime');
