@@ -6,6 +6,7 @@ description: "Sum of line revenue across all order lines in scope."
 tags: [global, approved]
 status: approved
 timestamp: 2026-07-15
+last_validated: 2026-07-28
 ---
 
 # Total Sales

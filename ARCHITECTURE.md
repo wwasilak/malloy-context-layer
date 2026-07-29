@@ -78,6 +78,37 @@ separate knowledge_map.json — the bundle IS the agent context.
 CI: run build on every PR; fail on errors; fail if the working tree is dirty
 after build (forces committed write-back). CODEOWNERS per domain folder.
 
+## D) Eval loop — `evals/` (`npm run eval`)
+
+The build proves the plane is internally consistent. It cannot prove the agent
+routes correctly, applies membership rules verbatim, refuses ungoverned terms,
+or returns the right number — that is this. Cases are `kp/agent/evals/*.md`
+(operational docs, skipped by the concept registry); the runner feeds each
+`question` to headless Claude Code in the repo root, so the shipped `CLAUDE.md`
+and `kp/` are what gets tested, not a stub.
+
+1. Grade the artifact (`numeric`, `refusal`, `contains`, `query_shape`,
+   `analysis`) AND the route (`must_use`, `must_not_contain`, `expect_receipt`).
+   The route checks run for every kind: an answer can carry the right number and
+   still have re-derived a governed concept from raw columns.
+2. `query_shape` runs the agent's Malloy and the `gold_query` against the same
+   data and compares result sets — grades the method, survives data movement.
+3. N=3 runs per case with a quorum, because the thing under test is stochastic.
+4. One JSONL row per (case × run) in `evals/results/`, each stamped with the
+   semantic identity hash: `sha256(kp/ + models/ + CLAUDE.md + runtime)`. Same
+   identity + different number = the data moved; different identity = the
+   meaning moved.
+5. Passing cases stamp `last_validated` on their `must_use` concepts (the writer
+   of the field described above).
+
+Data: the committed `ParquetFiles/` are the fixture set — hermetic and
+byte-identical in CI. `--live` switches WORKDIR for scheduled drift runs.
+
+CI (`.github/workflows/eval.yml`, separate from the build gate): the
+deterministic half blocks (cases parse, gold queries run, no gold drift); the
+agent sweep is report-only until its pass rate is stable. Full protocol in
+`docs/evals.md`.
+
 ## Agent protocol
 
 `CLAUDE.md` — routing via the root table, bindings resolve concept -> field,
