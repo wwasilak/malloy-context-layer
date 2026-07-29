@@ -16,13 +16,11 @@
 // =============================================================================
 const fs = require('fs');
 const path = require('path');
-const { pathToFileURL } = require('url');
-const malloy = require('@malloydata/malloy');
-const { DuckDBConnection } = require('@malloydata/db-duckdb');
 const okf = require('./okf-lib');
+const mal = require('./malloy-lib');
 
 const KP_DIR     = process.env.KP_DIR     || 'kp';
-const MODELS_DIR = process.env.MODELS_DIR || 'models';
+const MODELS_DIR = mal.MODELS_DIR;
 const WORKDIR    = process.env.WORKDIR    || process.cwd();
 
 // ---- helpers: pull tag values via the Annotations view (unchanged from v2) --
@@ -42,22 +40,15 @@ function modelTagOf(model) {
   return p && p.eq ? p.eq : null;
 }
 
-const urlReader = { readURL: async (url) => fs.readFileSync(url, 'utf8') };
-
 // ---- compile a Malloy model; now ALSO records field names per concept -------
 // (v2 only kept which concepts a source touches; v3 keeps (source, field) so
 //  the write-back can render real Implementations tables.)
+// The connect/load/definedHere plumbing lives in malloy-lib (SIMP-3); what is
+// build-specific is everything below it — reading # concept annotations.
 async function compileModel(filePath) {
   // (filePath is returned so the coverage probe can reload the right model)
-  const conn = new DuckDBConnection('duckdb', undefined, WORKDIR);
-  const runtime = new malloy.SingleConnectionRuntime({ connection: conn, urlReader });
-  const selfUrl = pathToFileURL(path.resolve(filePath)).href;
-  const model = await runtime.loadModel(new URL(selfUrl)).getModel();
+  const { model, definedHere } = await mal.loadModelFile(filePath, { workdir: WORKDIR });
   const modelName = modelTagOf(model) || path.basename(filePath, '.malloy');
-
-  const selfFile = path.basename(filePath);
-  const definedHere = loc =>
-    !!loc && !!loc.url && (loc.url === selfUrl || loc.url.endsWith('/' + selfFile));
 
   const sources = {};
   for (const exp of model.explores) {
@@ -97,9 +88,8 @@ async function compileModel(filePath) {
               + Object.keys(rels).length + ' relationships');
 
   // 2. compile all models
-  const modelFiles = fs.readdirSync(MODELS_DIR).filter(f => f.endsWith('.malloy'));
   const models = [];
-  for (const f of modelFiles) models.push(await compileModel(path.join(MODELS_DIR, f)));
+  for (const f of mal.listModelFiles(MODELS_DIR)) models.push(await compileModel(f));
   console.log('Models compiled: ' + models.map(m => m.model).join(', '));
 
   // 3. cross-plane referential validation (same discipline as v2)
@@ -182,12 +172,9 @@ async function compileModel(filePath) {
     } else {
       try {
         const m = models.find(x => x.model === impl.model);
-        const conn = new DuckDBConnection('duckdb', undefined, WORKDIR);
-        const runtime = new malloy.SingleConnectionRuntime({ connection: conn, urlReader });
-        const mm = runtime.loadModel(new URL(pathToFileURL(path.resolve(m.filePath)).href));
         const q = `run: ${impl.source} -> { aggregate: min_date is min(${impl.field}), max_date is max(${impl.field}) }`;
-        const res = await mm.loadQuery(q).run({ rowLimit: 1 });
-        const row = res.data.toObject()[0];
+        const { rows } = await mal.runQueryIn(m.filePath, q, { workdir: WORKDIR, rowLimit: 1 });
+        const row = rows[0];
         const iso = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : String(v).slice(0, 10));
         coverage = { anchor_concept: anchor, binding: `${impl.model}.${impl.source}.${impl.field}`,
                      min_date: iso(row.min_date), max_date: iso(row.max_date),

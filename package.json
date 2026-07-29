@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "build": "cross-env MODELS_DIR=models node build.js",
+    "test": "node --test",
     "eval": "cross-env MODELS_DIR=models node evals/run.js",
     "eval:gold": "cross-env MODELS_DIR=models node evals/gold.js",
     "eval:check": "cross-env MODELS_DIR=models node evals/gold.js --check",

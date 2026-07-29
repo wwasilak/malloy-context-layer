@@ -16,12 +16,9 @@
 //   supplied by the environment for scheduled drift runs.
 // =============================================================================
 const fs = require('fs');
-const path = require('path');
-const { pathToFileURL } = require('url');
-const malloy = require('@malloydata/malloy');
-const { DuckDBConnection } = require('@malloydata/db-duckdb');
+const mal = require('../../malloy-lib');
 
-const MODELS_DIR = process.env.MODELS_DIR || 'models';
+const MODELS_DIR = mal.MODELS_DIR;
 const REPO_ROOT = process.cwd();
 
 // `fixtures` = committed ParquetFiles at the repo root. `live` = whatever
@@ -37,46 +34,10 @@ function workdirFor(mode) {
   return REPO_ROOT;
 }
 
-const urlReader = { readURL: async (url) => fs.readFileSync(url, 'utf8') };
-
-function newRuntime(workdir) {
-  const connection = new DuckDBConnection('duckdb', undefined, workdir);
-  return new malloy.SingleConnectionRuntime({ connection, urlReader });
-}
-
-// ---- source -> model index --------------------------------------------------
-// Compile every model once and record which sources each exposes. A source
-// defined in base.malloy is visible from every model that imports it, so prefer
-// the model that DEFINES it — deterministic, and keeps the query in the
-// narrowest context that can serve it.
-async function buildSourceIndex(workdir) {
-  const runtime = newRuntime(workdir);
-  const files = fs.readdirSync(MODELS_DIR).filter((f) => f.endsWith('.malloy')).sort();
-  const defines = {};   // source -> model file that defines it
-  const exposes = {};   // source -> [model files that can see it]
-  const problems = [];
-
-  for (const f of files) {
-    const filePath = path.join(MODELS_DIR, f);
-    const selfUrl = pathToFileURL(path.resolve(filePath)).href;
-    let model;
-    try {
-      model = await runtime.loadModel(new URL(selfUrl)).getModel();
-    } catch (e) {
-      problems.push(`${filePath}: ${e.message || e}`);
-      continue;
-    }
-    const selfFile = path.basename(filePath);
-    for (const exp of model.explores) {
-      (exposes[exp.name] ||= []).push(filePath);
-      const loc = exp.location;
-      const definedHere = !!loc && !!loc.url && (loc.url === selfUrl || loc.url.endsWith('/' + selfFile));
-      if (definedHere && !defines[exp.name]) defines[exp.name] = filePath;
-    }
-  }
-  if (problems.length) throw new Error('model compilation failed:\n  ' + problems.join('\n  '));
-  return { defines, exposes };
-}
+// Compiling models and indexing which file defines which source is shared with
+// build.js — see malloy-lib (SIMP-3). Re-exported here so the harness keeps one
+// import.
+const buildSourceIndex = (workdir) => mal.buildSourceIndex(workdir, { modelsDir: MODELS_DIR });
 
 // ---- query text handling ----------------------------------------------------
 // The agent's executed Malloy arrives with its own `import` lines; we run it in
@@ -100,6 +61,8 @@ function resolveModelFor(queryText, index) {
 }
 
 // ---- run --------------------------------------------------------------------
+// Resolving WHICH model to run in is the harness's decision (the agent's query
+// arrives as bare text); executing it there is malloy-lib's job.
 async function runQuery(queryText, { workdir, index, rowLimit = 200 }) {
   const text = stripImports(queryText);
   const modelFile = resolveModelFor(text, index);
@@ -107,10 +70,7 @@ async function runQuery(queryText, { workdir, index, rowLimit = 200 }) {
     const src = referencedSource(text);
     throw new Error(src ? `no model exposes source '${src}'` : 'could not find a run: statement to execute');
   }
-  const runtime = newRuntime(workdir);
-  const mm = runtime.loadModel(new URL(pathToFileURL(path.resolve(modelFile)).href));
-  const result = await mm.loadQuery(text).run({ rowLimit });
-  return { rows: result.data.toObject(), modelFile };
+  return mal.runQueryIn(modelFile, text, { workdir, rowLimit });
 }
 
 // Run several statements (a gold_query may carry more than one) and return all
@@ -207,6 +167,18 @@ function containsAll(agentRows, goldRows) {
   const spare = agentCols.filter((c) => !used.has(c));
   if (unmapped.length > spare.length) return false;
   if (unmapped.length > MAX_UNMAPPED || spare.length > MAX_SPARE) return false;
+
+  // A rename match must be ANCHORED by something other than the value itself.
+  // With a single-row gold and no column name in common, the search has one
+  // number and no structure to check it against, so it will bind that number to
+  // whichever agent column happens to hold it — `order_count: 47` satisfying a
+  // gold `active_customers: 47`. That is EVAL-9's "found anywhere" hole again,
+  // surviving in the column dimension after it was closed in the row dimension.
+  // Anchor = at least one column agreeing by name, or more than one row (so a
+  // coincidence has to repeat). This costs nothing legitimate: a pure rename
+  // with no extra columns is already caught one tier up by `values`, and
+  // `subset` only decides cases where the agent returned EXTRA columns.
+  if (unmapped.length && !Object.keys(byName).length && goldRows.length < 2) return false;
 
   const project = (rows, pick) =>
     rows.map((r) => JSON.stringify(goldCols.map((g) => canonValue(r[pick(g)])))).sort();
