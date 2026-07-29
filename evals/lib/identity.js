@@ -86,18 +86,29 @@ function gitDirty(paths) {
   try {
     const out = execSync(`git status --porcelain -- ${paths.join(' ')}`, {
       stdio: ['ignore', 'pipe', 'ignore'],
-    }).toString().trim();
-    if (!out) return false;
-    const ignored = new Set(VOLATILE_FILES.map((f) => `kp/${f}`));
-    const changed = out.split('\n')
-      .map((l) => l.slice(3).trim().replace(/^"|"$/g, ''))
-      .filter((f) => !ignored.has(f));
+    }).toString();
+    if (!out.trim()) return false;
+    const changed = porcelainPaths(out).filter((f) => !VOLATILE_FILES.some((v) => f === `kp/${v}`));
     if (!changed.length) return false;
     // A file that differs ONLY by last_validated is stamped, not edited.
     return changed.some((f) => !stampOnlyChange(f));
   } catch {
     return null;
   }
+}
+
+// Paths out of `git status --porcelain`. The format is `XY PATH`, where X or Y
+// is very often a space (` M file`) — so the output must NOT be trimmed before
+// splitting, or the first entry loses its status column and `slice(3)` eats a
+// character of the path. Every LATER line keeps its leading space, which is
+// what makes that mistake corrupt exactly one entry and survive a casual read.
+function porcelainPaths(out) {
+  return out.split('\n')
+    .filter((l) => l.length > 3)
+    .map((l) => l.slice(3).trim())
+    .map((p) => (p.includes(' -> ') ? p.split(' -> ').pop() : p)) // renames
+    .map((p) => p.replace(/^"|"$/g, ''))
+    .filter(Boolean);
 }
 
 // True when the only difference from HEAD is the eval runner's own stamp.
@@ -137,4 +148,4 @@ function semanticIdentity({ kpDir = 'kp', modelsDir = 'models', runtimeSettings 
   };
 }
 
-module.exports = { semanticIdentity, treeDigest, sha256, VOLATILE_FILES };
+module.exports = { semanticIdentity, treeDigest, sha256, porcelainPaths, VOLATILE_FILES };
