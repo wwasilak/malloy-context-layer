@@ -160,44 +160,92 @@ const canonValuesOnly = (rows) =>
 
 const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
-// Every individual value in the result set, flattened and sorted. Used for the
-// containment test below.
-const flatValues = (rows) => {
-  const out = [];
-  const walk = (v) => {
-    const c = canonValue(v);
-    if (Array.isArray(c)) c.forEach(walk);
-    else if (c && typeof c === 'object') Object.values(c).forEach(walk);
-    else out.push(JSON.stringify(c));
-  };
-  rows.forEach(walk);
-  return out.sort();
-};
+// ---- containment (EVAL-9) ---------------------------------------------------
+// `subset` means the agent returned the gold TABLE plus extra COLUMNS — the
+// denominator it chose to show next to the count. That is the tier's stated
+// rationale and it is a legitimate pass.
+//
+// It does NOT mean "the gold numbers appear somewhere in the output". The first
+// implementation compared flattened value multisets, so a gold scalar of 47
+// passed against any 200-row result that happened to contain a 47 anywhere, in
+// any column. Extra ROWS are therefore not containment: a different row count is
+// a different grain or a missing filter, which is a different answer.
 
-// Is every gold value present in the agent's output, with multiplicity?
+const unionCols = (rows) => [...new Set(rows.flatMap((r) => Object.keys(r)))].sort();
+
+// Bounds on the assignment search below. Real cases map one or two measures;
+// these exist so a wide result set cannot turn a comparison into a factorial.
+const MAX_UNMAPPED = 3;
+const MAX_SPARE = 8;
+
+// Is the gold result a column-projection of the agent's, row for row?
+//
+// Columns are paired by name where the names agree. What is left over is
+// SEARCHED, not guessed: if some injective assignment of the agent's remaining
+// columns reproduces the gold table exactly, the gold table is present. The
+// agent is free to alias its output (`category_margin is margin`) — the `values`
+// tier already tolerates that for whole rows — so refusing to match a rename
+// would fail correct answers, and a suite that fails correct behaviour gets
+// ignored. What the search cannot do is invent a match: every gold row must
+// still appear, with every gold value, under one consistent assignment.
 function containsAll(agentRows, goldRows) {
-  const have = new Map();
-  for (const v of flatValues(agentRows)) have.set(v, (have.get(v) || 0) + 1);
-  for (const v of flatValues(goldRows)) {
-    const n = have.get(v) || 0;
-    if (n === 0) return false;
-    have.set(v, n - 1);
+  if (!goldRows.length || agentRows.length !== goldRows.length) return false;
+
+  const goldCols = unionCols(goldRows);
+  const agentCols = unionCols(agentRows);
+  if (agentCols.length < goldCols.length) return false;
+
+  const byName = {};
+  const used = new Set();
+  const lower = new Map(agentCols.map((c) => [c.toLowerCase(), c]));
+  for (const g of goldCols) {
+    const hit = lower.get(g.toLowerCase());
+    if (hit) { byName[g] = hit; used.add(hit); }
   }
-  return true;
+
+  const unmapped = goldCols.filter((g) => !(g in byName));
+  const spare = agentCols.filter((c) => !used.has(c));
+  if (unmapped.length > spare.length) return false;
+  if (unmapped.length > MAX_UNMAPPED || spare.length > MAX_SPARE) return false;
+
+  const project = (rows, pick) =>
+    rows.map((r) => JSON.stringify(goldCols.map((g) => canonValue(r[pick(g)])))).sort();
+  const goldProjected = project(goldRows, (g) => g);
+  const matches = (map) => sameList(goldProjected, project(agentRows, (g) => map[g]));
+
+  // depth-first over injective assignments of `unmapped` -> `spare`
+  const search = (i, map, taken) => {
+    if (i === unmapped.length) return matches(map);
+    for (const c of spare) {
+      if (taken.has(c)) continue;
+      taken.add(c);
+      map[unmapped[i]] = c;
+      if (search(i + 1, map, taken)) return true;
+      taken.delete(c);
+      delete map[unmapped[i]];
+    }
+    return false;
+  };
+
+  return search(0, { ...byName }, new Set());
 }
 
 // -> 'exact'  keys and values both match
 //    'values' same numbers, different column names (the agent may alias freely)
-//    'subset' the blessed numbers are all present, alongside extra context the
-//             agent chose to return (e.g. a denominator next to the count).
-//             Passing, but reported distinctly so a reviewer can disagree.
+//    'subset' every gold row is present with its own columns, alongside extra
+//             columns the agent chose to return (e.g. a denominator next to the
+//             count). Passing, but reported distinctly so a reviewer can
+//             disagree — and a case can refuse the tier via `min_match`.
 //    'none'
 function compareResults(aRows, bRows) {
   if (sameList(canonRows(aRows), canonRows(bRows))) return 'exact';
   if (sameList(canonValuesOnly(aRows), canonValuesOnly(bRows))) return 'values';
-  if (bRows.length && containsAll(aRows, bRows)) return 'subset';
+  if (containsAll(aRows, bRows)) return 'subset';
   return 'none';
 }
+
+// How strong a match a case is willing to accept, weakest-first.
+const MATCH_RANK = { none: 0, subset: 1, values: 2, exact: 3 };
 
 // Single headline number out of a result set — used to turn a gold_query into
 // an expect_value. Only meaningful when the query returns one row with one
@@ -223,6 +271,7 @@ function runtimeVersions() {
 
 module.exports = {
   workdirFor, buildSourceIndex, runQuery, runAll, compareResults, canonRows,
+  containsAll, MATCH_RANK,
   scalarFrom, referencedSource, stripImports, resolveModelFor, runtimeVersions,
   MODELS_DIR,
 };

@@ -22,6 +22,10 @@ const EVALS_DIR = process.env.EVALS_DIR || path.join('kp', 'agent', 'evals');
 // patterns that must not appear.
 const EXPECT_KINDS = new Set(['numeric', 'refusal', 'contains', 'query_shape', 'analysis']);
 
+// Weakest result-set match a query_shape case will accept (EVAL-9).
+const MATCH_TIERS = new Set(['subset', 'values', 'exact']);
+const DEFAULT_MATCH = 'subset';
+
 const DEFAULT_TOLERANCE = 0.005;
 
 // accept "kp:A, kp:B", ["kp:A"], or absent -> always an array
@@ -69,6 +73,19 @@ function loadCase(file) {
     errors.push(`query_shape case needs a gold_query to compare against`);
   if (d.expect_kind === 'contains' && !toList(d.expect_contains).length)
     errors.push(`contains case needs a non-empty expect_contains`);
+  if (d.min_match != null && !MATCH_TIERS.has(String(d.min_match)))
+    errors.push(`unknown min_match '${d.min_match}' (expected: ${[...MATCH_TIERS].join(' | ')})`);
+
+  // EVAL-10: an `analysis` case has no gold artifact — the cross-checks ARE the
+  // grade. With none of them set it passes unconditionally, forever, while
+  // looking like coverage. A test that cannot fail is worse than no test: it
+  // reports confidence it never earned.
+  const hasCrossCheck =
+    toList(d.must_use).length || toList(d.must_not_contain).length || d.expect_receipt === true;
+  if (d.expect_kind === 'analysis' && !hasCrossCheck)
+    errors.push(
+      `analysis case needs at least one cross-check (must_use, must_not_contain or expect_receipt) — ` +
+      `without one it is graded on nothing and passes unconditionally`);
 
   return {
     name,
@@ -86,6 +103,8 @@ function loadCase(file) {
     // opt-in: assert the AGT-1 provenance footer is present. Presence is
     // ALWAYS recorded as telemetry regardless (see grade.js).
     expect_receipt: d.expect_receipt === true,
+    // weakest acceptable result-set match for query_shape (EVAL-9)
+    min_match: d.min_match ? String(d.min_match) : DEFAULT_MATCH,
     gold_query: d.gold_query || null,
     gold_runs: goldRuns,
     errors,
@@ -110,4 +129,7 @@ function loadCases(dir = EVALS_DIR, filter = null) {
   return cases;
 }
 
-module.exports = { loadCases, loadCase, splitRuns, toList, EVALS_DIR, EXPECT_KINDS, DEFAULT_TOLERANCE };
+module.exports = {
+  loadCases, loadCase, splitRuns, toList,
+  EVALS_DIR, EXPECT_KINDS, DEFAULT_TOLERANCE, MATCH_TIERS, DEFAULT_MATCH,
+};

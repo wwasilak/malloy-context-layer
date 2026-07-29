@@ -20,7 +20,7 @@
 //   actually executed. Exploration is not commitment. A compile of an expression
 //   the agent then correctly discards is the loop working, not a violation.
 // =============================================================================
-const { compareResults } = require('./malloy');
+const { compareResults, MATCH_RANK } = require('./malloy');
 
 // ---- text helpers -----------------------------------------------------------
 // Whitespace-insensitive containment. `sum(line_revenue - line_cost)` and
@@ -174,6 +174,11 @@ async function gradeQueryShape(caseDef, run, ctx) {
     return { pass: false, detail: 'none of the agent queries could be re-executed: ' +
       agentResults.map((r) => r.error).filter(Boolean).join('; ').slice(0, 300) };
 
+  // The weakest tier this case accepts. `subset` (the default) allows the agent
+  // to return extra columns alongside the blessed ones; a case that wants the
+  // column names pinned too can demand `values` or `exact`.
+  const floor = MATCH_RANK[caseDef.min_match] ?? MATCH_RANK.subset;
+
   const details = [];
   let allMatched = true;
   for (let i = 0; i < caseDef.gold_runs.length; i++) {
@@ -189,16 +194,16 @@ async function gradeQueryShape(caseDef, run, ctx) {
     // Keep the strongest match across the agent's queries. Ranked rather than
     // special-cased, so adding a tier to compareResults cannot silently fall
     // through to 'none' here.
-    const RANK = { none: 0, subset: 1, values: 2, exact: 3 };
     let best = 'none';
     for (const ar of agentResults) {
       if (!ar.rows) continue;
       const cmp = compareResults(ar.rows, goldRows);
-      if (RANK[cmp] > RANK[best]) best = cmp;
+      if (MATCH_RANK[cmp] > MATCH_RANK[best]) best = cmp;
       if (best === 'exact') break;
     }
-    details.push(`gold[${i}]: ${best}`);
-    if (best === 'none') allMatched = false;
+    const ok = MATCH_RANK[best] >= floor;
+    details.push(`gold[${i}]: ${best}${ok ? '' : ` (below min_match ${caseDef.min_match})`}`);
+    if (!ok) allMatched = false;
   }
 
   return {

@@ -47,6 +47,8 @@ expect_contains: ["..."]     # contains: substrings the answer must include
 must_use: kp:AverageOrderValue        # URIs the trace must reference
 must_not_contain: ["total_sales / order_count"]
 expect_receipt: true         # assert the AGT-1 provenance footer
+min_match: subset            # query_shape: weakest acceptable result-set match
+                             # subset (default) | values | exact
 gold_query: |                # the verified Malloy behind the gold value
   run: ...
 ```
@@ -67,6 +69,11 @@ for:
 | `refusal` | the answer declines / labels the figure ungoverned | the term is not in the routing table |
 | `contains` | required substrings appear | a specific caveat or framing must be stated |
 | `analysis` | the cross-checks alone (`must_use`, `must_not_contain`, `expect_receipt`) | the question is open-ended about presentation |
+
+An `analysis` case with none of the three cross-checks set is **a load-time
+error** (EVAL-10): with no gold artifact and nothing to cross-check, it would
+pass unconditionally, forever, while looking like coverage. A test that cannot
+fail is worse than no test — it reports confidence it never earned.
 
 **`must_use` and `must_not_contain` run for every kind**, and they are the part
 that catches the failures actually seen in real sessions. An answer can carry
@@ -113,6 +120,35 @@ Numeric gold values rot when data moves. Two defences, both in use:
    Malloy and the `gold_query` are both run against the same data and their
    result sets compared. This proves equivalence without brittle string
    matching, and it survives data changes because both sides move together.
+
+### Match tiers (EVAL-9)
+
+The comparison returns the strongest tier that holds, and the tier is recorded
+in `grade_detail` so a reviewer can disagree with a weak pass:
+
+| tier | means |
+|---|---|
+| `exact` | same columns, same rows |
+| `values` | same rows, columns renamed — the agent may alias its output freely |
+| `subset` | the gold table is present, plus extra **columns** the agent chose to return (the denominator next to the count) |
+| `none` | no match |
+
+`subset` is column-and-row aware. Extra **rows** are not containment: a
+different row count is a different grain or a missing filter, which is a
+different answer. The first implementation compared flattened value multisets,
+so a gold scalar of `31576` passed against any result that happened to contain
+a `31576` anywhere — including one with fifty extra rows.
+
+Leftover column names are *searched*, not guessed: columns pair by name where
+the names agree, and if some assignment of the agent's remaining columns
+reproduces the gold table exactly, the gold table is present. A same-named
+column that disagrees is never re-mapped to some other column that agrees. The
+search is bounded (≤3 unmapped gold columns, ≤8 spare agent columns) so a wide
+result set cannot turn a comparison into a factorial.
+
+A case may set `min_match: subset | values | exact` (default `subset`) to refuse
+the weaker tiers where column names or exact shape are part of what is being
+tested.
 
 Result-set comparison is order-insensitive and reports one of:
 
