@@ -94,6 +94,31 @@ eval runner (EVAL-1)
 const pct = (n, d) => (d === 0 ? '—' : `${Math.round((n / d) * 100)}%`);
 const today = () => new Date().toISOString().slice(0, 10);
 const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').replace(/-\d{3}Z$/, 'Z');
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// A 429 or a 5xx says nothing about the protocol under test, and a sweep that
+// loses runs to one is a sweep with a smaller sample than it reports. Retry the
+// transport, never the verdict: only a run that never produced an answer is
+// re-run, and `attempts` is recorded so a flaky API is visible rather than
+// silently absorbed.
+const MAX_ATTEMPTS = 3;
+
+async function askWithRetry(fn, { quiet }) {
+  let spent = 0;
+  for (let attempt = 1; ; attempt++) {
+    const res = await fn();
+    const te = res.transport_error;
+    if (!te || !te.retryable || attempt >= MAX_ATTEMPTS) {
+      res.attempts = attempt;
+      // Failed attempts still cost money; keep the bill honest.
+      if (spent) res.cost_usd = (res.cost_usd || 0) + spent;
+      return res;
+    }
+    spent += res.cost_usd || 0;
+    if (!quiet) console.log(`    retrying after transport error (${te.reason.slice(0, 60)})`);
+    await sleep(4000 * attempt);
+  }
+}
 
 // ---- main -------------------------------------------------------------------
 (async () => {
@@ -171,30 +196,36 @@ const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').replace(/-\d{
 
   const caseResults = [];
   for (const c of cases) {
-    const runs = [];
+    const verdicts = [];   // completed runs only
+    let errored = 0;       // runs that never produced an answer (see askWithRetry)
     // Which lane. `--tier` overrides so the correlation check can run a
     // tier-1 case through tier 2 and compare verdicts.
     const tier = args.tier ?? c.tier;
     for (let i = 1; i <= args.runs; i++) {
-      const res = tier === 1
-        ? await askTier1({
+      const res = await askWithRetry(() => (tier === 1
+        ? askTier1({
           question: c.question, model: args.model, timeoutMs: args.timeout,
           // the repair round compiles against the SAME executor the grade uses
           validate: async (q) => {
             try { await ctx.runQuery(q); return null; } catch (e) { return e.message || String(e); }
           },
         })
-        : await ask({
+        : ask({
           question: c.question, model: args.model,
           maxTurns: args.maxTurns, timeoutMs: args.timeout,
-        });
+        })), { quiet: args.quiet });
       let g;
       try {
         g = await grade(c, res, ctx);
       } catch (e) {
-        g = { pass: false, detail: `grader error: ${e.message || e}`, extracted: null, receipt_present: false, cross_checks: [] };
+        g = {
+          pass: false, kind_pass: false, matches: null,
+          detail: `grader error: ${e.message || e}`,
+          extracted: null, receipt_present: false, cross_checks: [],
+        };
       }
-      runs.push(g.pass);
+      if (g.errored) errored++;
+      else verdicts.push(g.pass);
 
       write({
         ts: new Date().toISOString(),
@@ -202,6 +233,10 @@ const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').replace(/-\d{
         category: c.category,
         run: i,
         pass: g.pass,
+        // The run never answered (API error, exhausted retries). Not a verdict:
+        // consumers must exclude it rather than read it as a failing case.
+        errored: g.errored === true,
+        attempts: res.attempts ?? 1,
         expect_kind: c.expect_kind,
         // which lane produced this row, and whether it was forced (EVAL-12a).
         // A pass rate is not comparable across tiers, so the tier has to travel
@@ -214,6 +249,11 @@ const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').replace(/-\d{
         repairs: res.repairs ?? null,
         last_compile_error: res.last_compile_error || null,
         grade_detail: g.detail,
+        // Which layer decided the verdict, and how strong the result-set match
+        // was. Structured because the correlation check compares REASONS across
+        // lanes, and a prose sentence is not a comparison key.
+        kind_pass: g.kind_pass ?? null,
+        match_tiers: g.matches ? g.matches.map((m) => m.match) : null,
         agent_answer_excerpt: String(res.answer || '').slice(0, 1200),
         executed_malloy: (res.executedMalloy || []).join('\n---\n').slice(0, 4000),
         extracted_value: g.extracted,
@@ -252,13 +292,22 @@ const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').replace(/-\d{
       });
 
       if (!args.quiet)
-        console.log(`  ${g.pass ? 'PASS' : 'FAIL'}  ${c.name} [${i}/${args.runs}] — ${g.detail}`);
+        console.log(`  ${g.errored ? 'ERR ' : g.pass ? 'PASS' : 'FAIL'}  ${c.name} [${i}/${args.runs}] — ${g.detail}`);
     }
 
-    const passed = runs.filter(Boolean).length;
-    const casePass = passed >= args.quorum;
-    caseResults.push({ name: c.name, category: c.category, pass: casePass, passed, total: args.runs, must_use: c.must_use, tier });
-    console.log(`${casePass ? 'PASS' : 'FAIL'}  ${c.name} (${passed}/${args.runs}) [tier ${tier}]`);
+    const passed = verdicts.filter(Boolean).length;
+    // An errored run is a hole in the sample, and a case cannot pass through a
+    // hole: with fewer completed runs than the quorum there is no quorum. This
+    // is deliberately stricter than "score what we have" — a smaller sample
+    // silently satisfying the same quorum is how a flaky API becomes a green
+    // suite.
+    const casePass = errored === 0 && passed >= args.quorum;
+    caseResults.push({
+      name: c.name, category: c.category, pass: casePass, passed,
+      total: args.runs, errored, must_use: c.must_use, tier,
+    });
+    console.log(`${casePass ? 'PASS' : 'FAIL'}  ${c.name} (${passed}/${args.runs}` +
+      `${errored ? `, ${errored} never answered` : ''}) [tier ${tier}]`);
   }
 
   // Wait for the flush. process.exit() below would otherwise discard whatever
@@ -298,6 +347,9 @@ const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').replace(/-\d{
 
   console.log('');
   console.log(`Cases: ${passedCases}/${caseResults.length} passed (${pct(passedCases, caseResults.length)})`);
+  const holed = caseResults.filter((c) => c.errored);
+  if (holed.length)
+    console.log(`  NOT MEASURED — the agent never answered on ${holed.map((c) => `${c.name} (${c.errored} run(s))`).join(', ')}`);
   for (const [cat, v] of Object.entries(byCat).sort())
     console.log(`  ${cat.padEnd(16)} ${v.p}/${v.n}`);
   if (args.stamp) console.log(`last_validated stamped on ${stamped} concept file(s)`);

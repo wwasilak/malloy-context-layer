@@ -8,6 +8,7 @@
     "eval:gold": "cross-env MODELS_DIR=models node evals/gold.js",
     "eval:check": "cross-env MODELS_DIR=models node evals/gold.js --check",
     "eval:report": "node evals/report.js",
+    "eval:correlate": "cross-env MODELS_DIR=models node evals/correlate.js",
     "eval:selftest": "cross-env MODELS_DIR=models node evals/selftest.js"
   },
   "devDependencies": {

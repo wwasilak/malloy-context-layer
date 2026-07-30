@@ -24,7 +24,11 @@ const {
 } = require('../evals/lib/malloy');
 const { definedIn, listModelFiles } = require('../malloy-lib');
 const { parseJsonBlock, toRun, buildPrompt, buildRepairPrompt } = require('../evals/lib/tier1');
+const { transportErrorOf } = require('../evals/lib/agent');
 const { loadCase, DEFAULT_TIER } = require('../evals/lib/cases');
+const {
+  correlate, classify, laneVerdict, verdictFor, reasonKey, provenanceProblems, CLASS,
+} = require('../evals/lib/correlate');
 
 // ---- porcelainPaths (EVAL-8 regression) -------------------------------------
 // `git status --porcelain` emits `XY PATH`. X or Y is very often a space, so
@@ -265,4 +269,190 @@ test('a case defaults to tier 2, so nothing becomes cheap by accident', () => {
 test('a declared tier is honoured, and an unknown one is an error', () => {
   assert.strictEqual(loadCase('kp/agent/evals/aov-synonym.md').tier, 1);
   assert.strictEqual(loadCase('kp/agent/evals/membership-verbatim.md').tier, 2);
+});
+
+// ---- the correlation check (EVAL-12) -----------------------------------------
+// This is the gate on SIMP-1's deletions, so its arithmetic is the last place a
+// wrong answer should be able to hide. Every case below is a way the check
+// could quietly report "the cheap lane is fine" when it is not.
+const row = (o) => ({
+  case: 'c', category: 'x', pass: true, tier: 1, tier_declared: 1,
+  cross_checks: [], kind_pass: true, cost_usd: 0.1, tokens: 100, ...o,
+});
+const pair = (t1, t2, declared = 1) => [
+  ...t1.map((p) => row({ tier: 1, tier_declared: declared, pass: p })),
+  ...t2.map((p) => row({ tier: 2, tier_declared: declared, pass: p })),
+];
+
+test('both lanes passing is the only outcome that establishes the proxy', () => {
+  const r = correlate(pair([true, true, true], [true, true, true]));
+  assert.strictEqual(r.cases[0].class, CLASS.AGREE_PASS);
+  assert.strictEqual(r.summary.verdict, 'ESTABLISHED');
+  assert.strictEqual(r.summary.established, 1);
+});
+
+test('tier 1 passing what tier 2 fails is a FALSE GREEN and fails the gate', () => {
+  // The dangerous direction: the suite would be green over a broken product.
+  const r = correlate(pair([true, true, true], [true, false, false]));
+  assert.strictEqual(r.cases[0].class, CLASS.FALSE_GREEN);
+  assert.strictEqual(r.cases[0].gate, 'fail');
+  assert.deepStrictEqual(r.summary.false_green, ['c']);
+  assert.strictEqual(r.summary.verdict, 'BROKEN');
+});
+
+test('tier 1 failing what tier 2 passes is a FALSE RED and still fails the gate', () => {
+  // membership-verbatim: loud rather than silent, but the proxy is broken.
+  const r = correlate(pair([false, false, false], [true, true, true]));
+  assert.strictEqual(r.cases[0].class, CLASS.FALSE_RED);
+  assert.strictEqual(r.cases[0].gate, 'fail');
+  assert.match(r.cases[0].note, /move it back to tier 2/);
+});
+
+test('a lane that is merely flaky does not count as passing', () => {
+  // Quorum is unanimity by default: 2 of 3 in tier 2 is not a tier-2 pass, and
+  // the pair is therefore a false green, not agreement.
+  const r = correlate(pair([true, true, true], [true, true, false]));
+  assert.strictEqual(r.cases[0].class, CLASS.FALSE_GREEN);
+  assert.strictEqual(r.cases[0].tier2.flaky, true);
+});
+
+test('both lanes failing for DIFFERENT reasons is not agreement', () => {
+  const rows = [
+    row({ tier: 1, pass: false, kind_pass: false }),
+    row({ tier: 2, pass: false, kind_pass: true, cross_checks: [{ check: 'must_use', pattern: 'kp:X' }] }),
+  ];
+  const r = correlate(rows);
+  assert.strictEqual(r.cases[0].class, CLASS.AGREE_FAIL_DIFFERENT);
+  assert.strictEqual(r.summary.established, 0);
+  assert.strictEqual(r.summary.verdict, 'NOT_ESTABLISHED');
+});
+
+test('both lanes failing the same way is consistent but still proves nothing', () => {
+  const same = { pass: false, kind_pass: true, cross_checks: [{ check: 'must_use' }] };
+  const r = correlate([row({ tier: 1, ...same }), row({ tier: 2, ...same })]);
+  assert.strictEqual(r.cases[0].class, CLASS.AGREE_FAIL_SAME);
+  assert.strictEqual(r.cases[0].gate, 'warn');
+  assert.strictEqual(r.cases[0].establishes, false);
+  assert.deepStrictEqual(r.summary.inconclusive, ['c']);
+});
+
+test('an unknown failure reason never compares equal to a known one', () => {
+  // Rows written before kind_pass existed carry no reason. Treating that as a
+  // match would manufacture agreement out of missing telemetry.
+  const old = { pass: false, kind_pass: undefined, cross_checks: [] };
+  const r = correlate([row({ tier: 1, ...old }), row({ tier: 2, ...old })]);
+  assert.strictEqual(reasonKey(row({ pass: false, kind_pass: undefined })), '?');
+  assert.strictEqual(r.cases[0].class, CLASS.AGREE_FAIL_DIFFERENT);
+});
+
+test('a missing lane is INCOMPLETE, never a pass', () => {
+  const r = correlate(pair([true, true, true], []));
+  assert.strictEqual(r.cases[0].class, CLASS.INCOMPLETE);
+  assert.strictEqual(r.cases[0].gate, 'fail');
+  assert.strictEqual(r.summary.verdict, 'BROKEN');
+});
+
+test('a tier-2 case run cheap is a PROBE: it reports eligibility, it never fails the gate', () => {
+  const disagree = correlate(pair([true, true, true], [false, false, false], 2));
+  assert.strictEqual(disagree.cases[0].gate, 'ok');
+  assert.strictEqual(disagree.cases[0].probe, true);
+  assert.strictEqual(disagree.cases[0].eligible, false);
+  assert.strictEqual(disagree.summary.correlated, 0);   // probes prove nothing either way
+  assert.strictEqual(disagree.summary.verdict, 'NOT_ESTABLISHED');
+
+  const agree = correlate(pair([true, true, true], [true, true, true], 2));
+  assert.deepStrictEqual(agree.summary.promotable, ['c']);
+});
+
+test('an empty comparison is NOT_ESTABLISHED — nothing correlated is not success', () => {
+  assert.strictEqual(correlate([]).summary.verdict, 'NOT_ESTABLISHED');
+});
+
+test('run_meta lines are not mistaken for results', () => {
+  const r = correlate([{ kind: 'run_meta', cases: 1 }, ...pair([true], [true])]);
+  assert.strictEqual(r.cases.length, 1);
+  assert.strictEqual(r.cases[0].tier1.total, 1);
+});
+
+test('laneVerdict sums what the tiering exists to reduce', () => {
+  const v = laneVerdict([row({ cost_usd: 0.1, tokens: 100 }), row({ cost_usd: 0.2, tokens: 250 })]);
+  assert.ok(Math.abs(v.cost_usd - 0.3) < 1e-9);
+  assert.strictEqual(v.tokens, 350);
+});
+
+test('two lanes at different semantic identities are not comparable', () => {
+  // Otherwise --from silently compares two different products and calls the
+  // difference a lane disagreement.
+  const problems = provenanceProblems(
+    { semantic_identity: 'sha256:aaa', data_source: 'fixtures@1', model_id: 'm' },
+    { semantic_identity: 'sha256:bbb', data_source: 'fixtures@1', model_id: 'm' },
+  );
+  assert.strictEqual(problems.length, 1);
+  assert.match(problems[0], /two different products/);
+  assert.deepStrictEqual(
+    provenanceProblems({ semantic_identity: 'sha256:aaa' }, { semantic_identity: 'sha256:aaa' }), []);
+});
+
+// ---- transport failures are not verdicts -------------------------------------
+// Found by the correlation check's first real run: three of six tier-1 calls
+// came back "API Error: 529 Overloaded", the grader scored that text as an
+// answer that routed to no concepts, and the check reported a lane
+// disagreement that was entirely the API's.
+test('transportErrorOf recognises an API error and knows what is worth retrying', () => {
+  const overloaded = transportErrorOf('API Error: 529 Overloaded. This is a server-side issue…');
+  assert.strictEqual(overloaded.status, 529);
+  assert.strictEqual(overloaded.retryable, true);
+  assert.strictEqual(transportErrorOf('API Error: 429 rate limited').retryable, true);
+  // Credentials will not fix themselves — still not an answer, still not retried.
+  assert.strictEqual(transportErrorOf('API Error: 401 Unauthorized').retryable, false);
+  assert.ok(transportErrorOf('fetch failed'));
+});
+
+test('transportErrorOf does not fire on an answer that merely mentions an error', () => {
+  // Anchored to the first line: the whole point is that the CLI returns the
+  // error INSTEAD of an answer. An answer discussing one is still an answer.
+  assert.strictEqual(
+    transportErrorOf('Total sales were $1.2M.\n\nNote: an API Error: 500 was retried mid-run.'), null);
+  assert.strictEqual(transportErrorOf('AOV was $12.50'), null);
+  assert.strictEqual(transportErrorOf(''), null);
+});
+
+test('a run that never answered is excluded from the lane, not scored as a failure', () => {
+  const rows = [
+    row({ tier: 1, pass: true }), row({ tier: 1, pass: true }), row({ tier: 1, pass: true }),
+    row({ tier: 2, pass: true }), row({ tier: 2, pass: true }),
+    row({ tier: 2, pass: false, errored: true }),
+  ];
+  const r = correlate(rows, { quorum: 3 });
+  // Two completed tier-2 runs is fewer than the quorum, so the lane has no
+  // verdict at all — this must NOT read as "tier 2 failed" (a false green).
+  assert.strictEqual(r.cases[0].tier2.errored, 1);
+  assert.strictEqual(r.cases[0].tier2.present, false);
+  assert.strictEqual(r.cases[0].class, CLASS.INCOMPLETE);
+  assert.match(r.cases[0].note, /nothing was compared/);
+});
+
+test('a lane still has a verdict when every run answered', () => {
+  const r = correlate(pair([true, true, true], [true, true, true]), { quorum: 3 });
+  assert.strictEqual(r.cases[0].tier1.errored, 0);
+  assert.strictEqual(r.cases[0].class, CLASS.AGREE_PASS);
+});
+
+test('a provenance problem outranks perfect agreement', () => {
+  // Found by running the CLI: the two lanes agreed case by case, the verdict
+  // line read ESTABLISHED, and the exit code was 1. A headline that contradicts
+  // the exit code is exactly the false signal this harness keeps producing.
+  const r = correlate(pair([true, true, true], [true, true, true]),
+    { problems: ['semantic identity differs between the lanes'] });
+  assert.strictEqual(r.cases[0].class, CLASS.AGREE_PASS);
+  assert.strictEqual(r.summary.verdict, 'INVALID');
+});
+
+test('classify and verdictFor agree on which direction is dangerous', () => {
+  const passing = { present: true, pass: true, reasons: [] };
+  const failing = { present: true, pass: false, reasons: ['kind'] };
+  assert.strictEqual(classify(passing, failing), CLASS.FALSE_GREEN);
+  assert.match(verdictFor(CLASS.FALSE_GREEN, 1).note, /certifies behaviour the real agent does not exhibit/);
+  assert.strictEqual(verdictFor(CLASS.AGREE_PASS, 1).establishes, true);
+  assert.strictEqual(verdictFor(CLASS.AGREE_PASS, 2).establishes, false);
 });

@@ -180,6 +180,11 @@ async function gradeQueryShape(caseDef, run, ctx) {
   const floor = MATCH_RANK[caseDef.min_match] ?? MATCH_RANK.subset;
 
   const details = [];
+  // The match tier per gold query, kept structurally as well as in the prose
+  // detail. Two lanes can both PASS a query_shape case at different strengths
+  // (exact vs subset), and the correlation check has to be able to see that
+  // without regex-scraping its own sentence.
+  const matches = [];
   let allMatched = true;
   for (let i = 0; i < caseDef.gold_runs.length; i++) {
     const gold = caseDef.gold_runs[i];
@@ -188,6 +193,7 @@ async function gradeQueryShape(caseDef, run, ctx) {
       goldRows = (await ctx.runQuery(gold)).rows;
     } catch (e) {
       details.push(`gold[${i}] failed to run: ${e.message || e}`);
+      matches.push({ gold: i, match: 'error', ok: false });
       allMatched = false;
       continue;
     }
@@ -202,12 +208,14 @@ async function gradeQueryShape(caseDef, run, ctx) {
       if (best === 'exact') break;
     }
     const ok = MATCH_RANK[best] >= floor;
+    matches.push({ gold: i, match: best, ok });
     details.push(`gold[${i}]: ${best}${ok ? '' : ` (below min_match ${caseDef.min_match})`}`);
     if (!ok) allMatched = false;
   }
 
   return {
     pass: allMatched,
+    matches,
     detail: (allMatched ? 'result sets equivalent — ' : 'result set mismatch — ') + details.join(', '),
   };
 }
@@ -270,8 +278,23 @@ function crossChecks(caseDef, run) {
 // ---- entry point ------------------------------------------------------------
 // ctx: { runQuery(text) -> {rows} }
 async function grade(caseDef, run, ctx) {
+  // The agent never answered. Not a wrong answer — no answer, so there is no
+  // behaviour to score. `errored` runs are excluded from the quorum rather than
+  // counted as failures: grading an "API Error: 529" as a case that routed to
+  // no concepts is how infrastructure noise turns into a product verdict.
+  if (run.transport_error)
+    return {
+      pass: false, errored: true, kind_pass: null, matches: null,
+      detail: `not graded — the agent never answered: ${run.transport_error.reason}`,
+      extracted: null, receipt_present: false, cross_checks: [],
+    };
+
   if (run.error && !run.answer)
-    return { pass: false, detail: `agent run failed: ${run.error}`, extracted: null, receipt_present: false, cross_checks: [] };
+    return {
+      pass: false, kind_pass: false, matches: null,
+      detail: `agent run failed: ${run.error}`,
+      extracted: null, receipt_present: false, cross_checks: [],
+    };
 
   let kindResult;
   let extracted = null;
@@ -318,7 +341,19 @@ async function grade(caseDef, run, ctx) {
   const pass = kindResult.pass && xs.length === 0;
   const detail = [kindResult.detail, ...xs.map((x) => x.message)].filter(Boolean).join(' | ');
 
-  return { pass, detail, extracted, receipt_present: hasReceipt(run.answer), cross_checks: xs };
+  return {
+    pass,
+    // Which LAYER failed, kept separate from the joined prose. A run that fails
+    // its kind and a run that fails a cross-check are two different failures,
+    // and telling them apart is what lets the correlation check ask whether two
+    // lanes failed for the same reason (EVAL-12 correlation).
+    kind_pass: kindResult.pass,
+    matches: kindResult.matches || null,
+    detail,
+    extracted,
+    receipt_present: hasReceipt(run.answer),
+    cross_checks: xs,
+  };
 }
 
 module.exports = {

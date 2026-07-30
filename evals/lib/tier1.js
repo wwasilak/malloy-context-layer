@@ -51,6 +51,7 @@
 // =============================================================================
 const fs = require('fs');
 const { spawn } = require('child_process');
+const { transportErrorOf } = require('./agent');
 
 const AGENT_BIN = process.env.EVAL_AGENT_BIN || 'claude';
 const KP_INDEX = process.env.KP_INDEX || 'kp/index.md';
@@ -258,6 +259,18 @@ async function askTier1({
     envelope = res.envelope;
     cost += envelope.total_cost_usd ?? 0;
     tokens += sumTokens(envelope.usage);
+
+    // An API failure lands in `result` like any other reply. Bail before the
+    // repair round: there is nothing to repair, and re-prompting an overloaded
+    // API is how one 529 becomes two.
+    const te = transportErrorOf(envelope.result);
+    if (te) {
+      const f = fail(te.reason);
+      f.transport_error = te;
+      f.cost_usd = cost || null;
+      f.tokens = tokens || null;
+      return f;
+    }
 
     const p = parseJsonBlock(envelope.result);
     parsed = p.data;

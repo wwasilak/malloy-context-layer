@@ -61,6 +61,20 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: npm run eval -- --runs 3
 
+      # EVAL-12's invariant: a cheap tier is only trustworthy while it keeps
+      # agreeing with the expensive tier it replaces. This runs each tier-1 case
+      # in BOTH lanes and compares the verdicts, so a cheap lane that has
+      # drifted into passing what the real agent fails is caught here rather
+      # than by nobody. It costs 2x the runs of the cases it covers, so it rides
+      # the schedule and manual dispatch, never a PR.
+      - name: Correlation check — does the cheap lane still agree?
+        id: correlate
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        continue-on-error: true          # <- remove together with the sweep's
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: npm run eval:correlate -- --runs 3
+
       - name: Report pass rate and flips vs the previous run
         if: always()
         run: npm run eval:report || true
@@ -70,7 +84,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: eval-results-${{ github.run_id }}
-          path: evals/results/*.jsonl
+          path: |
+            evals/results/*.jsonl
+            evals/results/correlation/**
           retention-days: 90
 
       - name: Summarise
@@ -84,6 +100,12 @@ jobs:
             else
               echo 'Some cases failed — report-only, not blocking this PR.'
             fi
+            echo ''
+            case "${{ steps.correlate.outcome }}" in
+              success) echo 'Correlation: ESTABLISHED — every tier-1 case was confirmed by a tier-2 run.' ;;
+              failure) echo 'Correlation: NOT established — the cheap lane disagrees with the expensive one. See the correlate step.' ;;
+              *)       echo 'Correlation check not run (schedule / manual dispatch only).' ;;
+            esac
             echo ''
             echo '```'
             npm run eval:report 2>&1 | tail -40 || true

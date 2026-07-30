@@ -19,6 +19,9 @@ npm run eval -- --runs 1          # quick pass
 npm run eval -- --live            # scheduled drift run (needs EVAL_LIVE_WORKDIR)
 npm run eval -- --model claude-opus-5
 
+npm run eval -- --tier 1          # force every case into the cheap lane
+npm run eval:correlate            # run each tier-1 case in BOTH lanes and compare
+
 npm run eval:gold                 # (re)compute expect_value from each gold_query
 npm run eval:check                # verify cases parse + gold has not drifted (no agent)
 npm run eval:report               # pass rate by category + flips vs the previous run
@@ -140,6 +143,101 @@ Prefer `analysis` when several output shapes are equally correct; `query_shape`
 on an open-ended question marks correct variants as failures, and a suite that
 fails correct behaviour gets ignored.
 
+## The two lanes (EVAL-12a / SIMP-1)
+
+Most cases test a **decision** — which governed concepts does this question
+resolve to, and what Malloy follows from their bindings — and that decision is
+made on turn one. Watching it play out over twenty agentic turns spends ~600k
+tokens to observe something already settled, and drags in the whole
+trajectory-parsing layer, which is where both bugs found in the first review
+lived.
+
+| lane | how it runs | grades |
+|---|---|---|
+| **tier 1** | one call, no tools, structured JSON out: the concepts it routed to and the query it *would* run. The harness executes that query against the same fixtures. | the routing decision |
+| **tier 2** | the full agentic run | the trajectory — self-verification, iterating on a compile error, logging discipline |
+
+`tier: 1 | 2` per case, **default 2**: a case only becomes cheap when someone
+decides it can be. `--tier <n>` forces every case into one lane.
+
+`CLAUDE.md` is neither touched nor injected for tier 1 — it is auto-discovered
+from the working directory exactly as in a real session. Tier 1 differs from
+tier 2 in **tools and turns and nothing else**, which is the only thing that
+makes comparing the two lanes meaningful. The one thing the prompt does add is
+notation: a Binding of `model.source.field` is queried as
+`run: source -> { … }`. That is not a hint about the answer; it is something the
+compiler teaches a tier-2 agent on its first call and tier 1 has had the
+compiler taken away. Compensate in the harness for context the harness removed,
+never in `CLAUDE.md`.
+
+Tier 1 gets **one compile-repair round**: the harness hands the compiler's own
+error back and asks for a correction. It repairs only a query that *fails to
+run* — a wrong-but-runnable query is a wrong decision and is graded as one,
+never coached into agreement. Repairs are counted on every row; a case that
+always needs one is telling you something about the protocol's dialect
+guidance, not about the harness.
+
+### Which cases can be tier 1
+
+**Bindings you can aggregate directly.** Anything whose grain or type must be
+inspected stays tier 2.
+
+Learned by getting it wrong: `membership-verbatim` was declared tier 1 and moved
+back. With only the routing table the agent wrote
+`aggregate: is_active_customer` — but that binding is a *boolean* measure
+(`made_an_order.count() {…} > 0`), so aggregating it at the top grain asks "did
+anyone order?" instead of "how many customers are active". It **runs**, so no
+repair round can catch it. Reaching the right grain needs the measure's type,
+which lives in the source and not in the table.
+
+### The correlation check (`eval:correlate`)
+
+Tier 1 is a *proxy*. It claims the verdict would have been the same. Nothing in
+a cheap sweep checks that claim, so:
+
+> every cheap tier must be periodically validated against the expensive tier it
+> replaces, or you get a green suite over a wrong product.
+
+`npm run eval:correlate` runs each case declared `tier: 1` in **both** lanes and
+compares the verdicts. It does not reimplement the runner — it invokes
+`run.js --tier 1` and `--tier 2` over the same cases, so grading, cross-checks
+and gold execution are literally the sweep's code.
+
+| outcome | meaning |
+|---|---|
+| `AGREE_PASS` | the only outcome that **establishes** the proxy |
+| `FALSE_GREEN` | tier 1 passes what tier 2 fails — the suite certifies behaviour the real agent does not exhibit. The dangerous direction: nobody looks at a green suite |
+| `FALSE_RED` | tier 1 fails what tier 2 passes — loud rather than silent, but still a broken proxy. Move the case back to tier 2 |
+| `AGREE_FAIL_SAME` / `_DIFFERENT` | both lanes failed. Consistent at best; a red case proves nothing about the proxy, and the same verdict for *different* reasons is not agreement at all |
+| `INCOMPLETE` | a lane produced no runs — nothing was compared |
+
+Both disagreement directions fail the check. Exit 0 means one thing only: the
+proxy is validated. "Both lanes failed" and "could not compare" leave the cheap
+lane unproven, and unproven must never read as fine.
+
+Two guards worth knowing about:
+
+- **Provenance outranks the arithmetic.** If the two lanes ran at different
+  semantic identities, data sources or models, the verdict is `INVALID` — a
+  perfect case-by-case agreement between two *different products* has compared
+  nothing.
+- **Reasons, not just verdicts.** Every row carries `kind_pass` and the names of
+  the cross-checks that fired, so two lanes failing the same case for unrelated
+  reasons are reported as inconclusive rather than as evidence.
+
+Running a **tier-2** case cheap (`--case <name>`, or `--all`) is a *probe*: it
+asks whether the case could be promoted, and never fails the gate.
+
+The check never stamps `last_validated`. A forced-lane run measures the harness,
+not a concept, and it runs each case twice — letting it stamp would put the
+cheap lane's word on a governed definition. Its output lands in
+`evals/results/correlation/<ts>/` rather than the main results stream, because a
+forced-tier sweep sitting beside normal sweeps would be diffed against one by
+`eval:report` and every case that changed lane would read as a flip.
+
+It rides the scheduled and manually dispatched CI runs, not PRs: it costs twice
+the runs of the cases it covers.
+
 ## Anchored ground truth (EVAL-2)
 
 Numeric gold values rot when data moves. Two defences, both in use:
@@ -226,6 +324,30 @@ as likely to be noise as a regression, so each case runs N=3 times and passes
 only on a quorum (default: all of them). Every individual run is recorded, and
 the report lists cases that passed 2 of 3 — a flaky case is visibly flaky rather
 than silently alternating colour between builds.
+
+### When the agent never answers
+
+The CLI returns an API failure in the same envelope as a successful reply — the
+error text lands where the answer would be — so `API Error: 529 Overloaded`
+reaches the grader as an answer that routed to no concepts and ran no Malloy,
+and scores as a confident product failure. The correlation check's first real
+run was invalidated this way: three of six tier-1 calls got a 529 and the check
+reported a lane disagreement that was entirely the API's.
+
+So a transport failure is classified, not graded:
+
+- A run whose reply *begins* with an API/network error is a **transport error**,
+  and is retried up to 3 attempts (429 and 5xx only — a 401 will not fix
+  itself). `attempts` is recorded on the row, so a flaky API stays visible
+  rather than being silently absorbed.
+- If the retries are exhausted the row is marked `errored: true` and is **not a
+  verdict**: it is excluded from the quorum instead of counted as a failure.
+- A case with any errored run does **not pass**. Fewer completed runs than the
+  quorum means there is no quorum — scoring the survivors would let one lane's
+  bad luck read as a smaller sample quietly satisfying the same bar.
+
+A reply that fails to *parse*, or a run that hits the turn cap, is behaviour and
+stays a genuine failure. The distinction is whether the agent answered at all.
 
 ## Semantic identity (EVAL-6)
 
@@ -333,12 +455,18 @@ the run refuses to start if `CLAUDE.md` has uncommitted changes.
 
 `.github/workflows/eval.yml`, deliberately separate from the build gate:
 
-- **`gold` job — blocking.** Cases parse and gold queries run. Fully
-  deterministic, no agent, so it can gate safely today.
+- **The deterministic checks are in `npm run build`** (SIMP-4), which already
+  blocks the PR: every case parses, every gold query runs, no committed gold
+  value has drifted. They are validation, and validation belongs in the build
+  rather than in a second gate someone has to remember. `eval.yml` keeps them
+  as a pre-flight step, which costs seconds and stops a broken case from
+  spending a whole sweep.
 - **`eval` job — report-only.** The agent sweep, with `continue-on-error`.
   Promote it to blocking by deleting that one line, once the pass rate is green
   and stable. A stochastic suite that blocks merges on day one gets switched off
   within a week.
+- **The correlation check** runs in the same job on schedule and manual
+  dispatch only. Promote it to blocking together with the sweep.
 
 Scheduled Monday drift runs use the same cases against live data.
 
