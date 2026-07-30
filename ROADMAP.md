@@ -220,7 +220,7 @@ carries the whole eval loop: Phase 2 + Phase 2b were merged as `838de26`.
 | `c185349` | SIMP-4 (tier-0 checks into `build.js`) |
 | `782b51d` | EVAL-12a / SIMP-1 (the tier-1 lane) |
 | `ead4173` | EVAL-12d (the correlation check) + EVAL-14 (transport failures are not verdicts) |
-| *pending* | EVAL-12c (the cache we already had, and the premise that said we didn't) |
+| `f915fec` | EVAL-12c (the cache we already had, and the premise that said we didn't) |
 
 **Gates, and how to run them.** `npm test` (58 cases, no database, ~1s) →
 `npm run build` (validation + tier-0 eval checks + write-back; must leave the
