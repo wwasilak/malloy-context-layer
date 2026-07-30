@@ -218,7 +218,7 @@ carries the whole eval loop: Phase 2 + Phase 2b were merged as `838de26`.
 | `352224d` | SIMP-3 (shared `malloy-lib.js`) + the first tracked unit tests |
 | `c185349` | SIMP-4 (tier-0 checks into `build.js`) |
 | `782b51d` | EVAL-12a / SIMP-1 (the tier-1 lane) |
-| `4a58e9c` | EVAL-12d (the correlation check) + EVAL-14 (transport failures are not verdicts) |
+| `ead4173` | EVAL-12d (the correlation check) + EVAL-14 (transport failures are not verdicts) |
 
 **Gates, and how to run them.** `npm test` (52 cases, no database, ~0.7s) →
 `npm run build` (validation + tier-0 eval checks + write-back; must leave the
