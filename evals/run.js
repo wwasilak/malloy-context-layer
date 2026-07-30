@@ -194,6 +194,14 @@ async function askWithRetry(fn, { quiet }) {
     }
   }
 
+  // EVAL-12c: the sweep's prompt-cache accounting. The shared prefix (system
+  // prompt + CLAUDE.md + routing table) is content-keyed, so it is paid for once
+  // per sweep and READ by every run after — as long as it stays byte-identical
+  // and the runs stay close enough together to be inside the TTL. Nothing about
+  // a verdict would change if that broke; only the bill would, by ~5x. So it is
+  // reported.
+  const cache = { read: 0, created: 0, runs: 0, warm: 0 };
+
   const caseResults = [];
   for (const c of cases) {
     const verdicts = [];   // completed runs only
@@ -226,6 +234,16 @@ async function askWithRetry(fn, { quiet }) {
       }
       if (g.errored) errored++;
       else verdicts.push(g.pass);
+
+      if (res.usage) {
+        cache.runs++;
+        cache.read += res.usage.cache_read_input_tokens || 0;
+        cache.created += res.usage.cache_creation_input_tokens || 0;
+        // "Warm" = this run wrote no cache at all, so it paid read prices for
+        // the whole prefix. Only reachable in tier 1: a tier-2 session grows its
+        // own context every turn and always has something new to write.
+        if (!(res.usage.cache_creation_input_tokens || 0)) cache.warm++;
+      }
 
       write({
         ts: new Date().toISOString(),
@@ -352,6 +370,13 @@ async function askWithRetry(fn, { quiet }) {
     console.log(`  NOT MEASURED — the agent never answered on ${holed.map((c) => `${c.name} (${c.errored} run(s))`).join(', ')}`);
   for (const [cat, v] of Object.entries(byCat).sort())
     console.log(`  ${cat.padEnd(16)} ${v.p}/${v.n}`);
+
+  if (cache.runs && cache.read + cache.created) {
+    const reuse = cache.read / (cache.read + cache.created);
+    console.log(`Prompt cache: ${Math.round(reuse * 100)}% of prefix tokens read, not written` +
+      ` (${cache.read.toLocaleString()} read / ${cache.created.toLocaleString()} created)` +
+      `, ${cache.warm}/${cache.runs} run(s) wrote nothing`);
+  }
   if (args.stamp) console.log(`last_validated stamped on ${stamped} concept file(s)`);
   else if (args.stampSuppressed) console.log('last_validated NOT stamped — --live data is not the pinned fixtures');
   console.log(`Results: ${outFile}`);

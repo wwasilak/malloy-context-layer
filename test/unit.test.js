@@ -23,7 +23,9 @@ const {
   compareResults, containsAll, stripImports, referencedSource, resolveModelFor,
 } = require('../evals/lib/malloy');
 const { definedIn, listModelFiles } = require('../malloy-lib');
-const { parseJsonBlock, toRun, buildPrompt, buildRepairPrompt } = require('../evals/lib/tier1');
+const {
+  parseJsonBlock, toRun, buildPrompt, buildRepairPrompt, addUsage, sumTokens, askTier1,
+} = require('../evals/lib/tier1');
 const { transportErrorOf } = require('../evals/lib/agent');
 const { loadCase, DEFAULT_TIER } = require('../evals/lib/cases');
 const {
@@ -257,6 +259,108 @@ test('the repair prompt restates context and carries the compiler error', () => 
   assert.match(p, /TABLE/);                       // stateless: full context restated
   assert.match(p, /Aggregate expressions are not allowed/);
   assert.match(p, /dialect correction, not a re-think/);
+});
+
+// ---- prompt-cache reuse (EVAL-12c) -------------------------------------------
+// Caching is content-keyed on the PREFIX, so tier 1's ~11k-token preamble +
+// routing table is written once per sweep and read by every run after it.
+// Measured 2026-07-30: cold $0.12-0.16 a run, warm $0.025-0.033. Nothing about a
+// verdict changes if this breaks — which is exactly why it needs a test rather
+// than trust. Anything case-specific placed above the routing table takes the
+// ~5x back silently.
+test('every tier-1 case shares one byte-identical cacheable prefix', () => {
+  const table = '| Concept | Binding |\n| kp:TotalSales | sales.sales_order.total_sales |';
+  const a = buildPrompt({ question: 'What was the AOV in 2023?', routingTable: table });
+  const b = buildPrompt({ question: 'Do we govern customer lifetime value?', routingTable: table });
+  const prefixOf = (p) => p.slice(0, p.lastIndexOf('QUESTION: '));
+
+  assert.strictEqual(prefixOf(a), prefixOf(b));
+  assert.ok(prefixOf(a).includes(table), 'the routing table must be inside the shared prefix');
+  // the question is genuinely last, not merely also-at-the-end
+  assert.ok(a.endsWith('What was the AOV in 2023?'));
+  assert.ok(!prefixOf(a).includes('AOV'), 'no part of the question may appear above the prefix boundary');
+});
+
+test('the repair prompt extends the cacheable prefix instead of rebuilding one', () => {
+  const base = buildPrompt({ question: 'q1', routingTable: 'TABLE' });
+  const repair = buildRepairPrompt({
+    question: 'q1', routingTable: 'TABLE', previous: '{"malloy":"run: x"}', error: 'boom',
+  });
+  assert.ok(repair.startsWith(base), 'a repair must append below the question, never above it');
+});
+
+test('usage accumulates across a repair round, so the breakdown matches the total', () => {
+  // aov-synonym run 2 (2026-07-30) recorded tokens 34,774 against a usage
+  // breakdown summing to 17,686: two API calls, one envelope kept. The
+  // breakdown is the sensor this whole item reads, so it must not under-report.
+  const call1 = {
+    input_tokens: 2, output_tokens: 900, cache_read_input_tokens: 2711,
+    cache_creation_input_tokens: 13258,
+  };
+  const call2 = {
+    input_tokens: 2, output_tokens: 183, cache_read_input_tokens: 5803,
+    cache_creation_input_tokens: 10798,
+  };
+  const acc = addUsage(addUsage(null, call1), call2);
+  assert.strictEqual(acc.cache_creation_input_tokens, 24056);
+  assert.strictEqual(acc.cache_read_input_tokens, 8514);
+  assert.strictEqual(sumTokens(acc), sumTokens(call1) + sumTokens(call2));
+});
+
+test('addUsage tolerates a missing envelope without zeroing what it has', () => {
+  const acc = addUsage({ input_tokens: 5 }, null);
+  assert.deepStrictEqual(acc, { input_tokens: 5 });
+  assert.strictEqual(addUsage(null, null), null);
+  assert.strictEqual(sumTokens(null), 0);
+});
+
+// The two above pin addUsage. This one pins that askTier1 actually USES it —
+// the distinction that let the first draft of this test stay green against the
+// exact bug it was written for.
+const envelope = (usage, malloy, cost = 0.1) => ({
+  envelope: {
+    result: '```json\n' + JSON.stringify({ concepts: ['kp:X'], malloy, answer: 'a' }) + '\n```',
+    usage, total_cost_usd: cost, num_turns: 1, session_id: 's',
+  },
+  error: null,
+});
+
+test('a repaired tier-1 run reports the usage of BOTH calls, not just the last', async () => {
+  const calls = [
+    envelope({ input_tokens: 2, output_tokens: 900, cache_read_input_tokens: 2711, cache_creation_input_tokens: 13258 }, 'run: broken'),
+    envelope({ input_tokens: 2, output_tokens: 183, cache_read_input_tokens: 5803, cache_creation_input_tokens: 10798 }, 'run: fixed'),
+  ];
+  let n = 0;
+  const run = await askTier1({
+    question: 'q',
+    kpIndex: 'kp/index.md',
+    call: async () => calls[n++],
+    // fail the first proposed query, accept the second: one repair round
+    validate: async (q) => (q === 'run: broken' ? 'compile error' : null),
+  });
+
+  assert.strictEqual(run.repairs, 1);
+  assert.strictEqual(n, 2, 'the repair round must have made a second call');
+  assert.strictEqual(run.usage.cache_creation_input_tokens, 24056);
+  assert.strictEqual(run.usage.cache_read_input_tokens, 8514);
+  // the breakdown and the total must describe the same run
+  assert.strictEqual(sumTokens(run.usage), run.tokens);
+  assert.ok(Math.abs(run.cost_usd - 0.2) < 1e-9);
+  assert.deepStrictEqual(run.executedMalloy, ['run: fixed']);
+});
+
+test('a tier-1 run that needs no repair makes exactly one call', async () => {
+  let n = 0;
+  const run = await askTier1({
+    question: 'q',
+    kpIndex: 'kp/index.md',
+    call: async () => { n++; return envelope({ input_tokens: 2, output_tokens: 500, cache_read_input_tokens: 15994, cache_creation_input_tokens: 0 }, 'run: fine'); },
+    validate: async () => null,
+  });
+  assert.strictEqual(n, 1);
+  assert.strictEqual(run.repairs, 0);
+  assert.strictEqual(run.usage.cache_creation_input_tokens, 0);   // a fully warm run
+  assert.strictEqual(sumTokens(run.usage), run.tokens);
 });
 
 // ---- case tiers --------------------------------------------------------------

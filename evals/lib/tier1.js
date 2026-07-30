@@ -59,6 +59,15 @@ const KP_INDEX = process.env.KP_INDEX || 'kp/index.md';
 // With no tools the agent cannot Read the routing table, so it is supplied.
 // This is the ONLY context injected: everything else (the protocol itself)
 // arrives the way it does in production.
+//
+// THE QUESTION GOES LAST, AND THAT IS LOAD-BEARING (EVAL-12c). Prompt caching is
+// content-keyed on the prefix, not on the session, so every tier-1 run of every
+// case shares the ~11k-token preamble + routing table and pays to CREATE it once
+// per sweep rather than once per run. Measured 2026-07-30: a cold run is
+// $0.12-0.16, a warm one $0.025-0.033 — a ~5x spread that no verdict would ever
+// report. Interpolating the question (or anything else case-specific) above the
+// table would silently take that back. `buildRepairPrompt` appends BELOW the
+// question for the same reason.
 function buildPrompt({ question, routingTable }) {
   return `You are answering a question against the Knowledge Plane, following the
 protocol in CLAUDE.md exactly as you normally would.
@@ -106,6 +115,8 @@ QUESTION: ${question}`;
 
 // The repair round. Stateless on purpose — the whole context is restated, so
 // no session has to be resumed and the call stays a single independent turn.
+// Restating it is also what keeps the repair call cache-warm: it EXTENDS the
+// base prompt rather than rebuilding one, so only the appended error is new.
 function buildRepairPrompt({ question, routingTable, previous, error }) {
   return `${buildPrompt({ question, routingTable })}
 
@@ -216,10 +227,23 @@ function oneCall({ prompt, model, timeoutMs, cwd }) {
   });
 }
 
-const sumTokens = (u) => (u
-  ? (u.input_tokens || 0) + (u.output_tokens || 0) +
-    (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0)
-  : 0);
+const USAGE_KEYS = [
+  'input_tokens', 'output_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens',
+];
+
+const sumTokens = (u) => (u ? USAGE_KEYS.reduce((n, k) => n + (u[k] || 0), 0) : 0);
+
+// A repaired run is TWO API calls, and `cost`/`tokens` already accumulate both.
+// Keeping only the last envelope's `usage` alongside them made the breakdown
+// disagree with the total it is supposed to break down — and the breakdown is
+// the sensor EVAL-12c reads to tell a cache hit from a cache write. Observed on
+// aov-synonym run 2 (2026-07-30): tokens 34,774, usage summing to 17,686.
+function addUsage(acc, u) {
+  if (!u) return acc;
+  const out = acc || {};
+  for (const k of USAGE_KEYS) if (u[k] != null) out[k] = (out[k] || 0) + u[k];
+  return out;
+}
 
 // Resolve, never reject — same contract as agent.ask().
 //
@@ -227,9 +251,16 @@ const sumTokens = (u) => (u
 // runner passes the same executor the grader uses, so the repair round sees the
 // identical compiler the grade will be based on. Omit it and there is no repair
 // round, which is what the unit tests use.
+//
+// `call` is the seam for tests: the default spawns the agent, and a fake lets
+// the repair loop and the per-envelope bookkeeping be exercised without a
+// subprocess. It exists because the first version of EVAL-12c's usage test
+// pinned `addUsage` and NOT the line that calls it — so replacing that line with
+// the bug it was written for left the suite green. Same shape as EVAL-8: the
+// test exercised the helper and never the wiring.
 async function askTier1({
   question, model = null, timeoutMs = 120000, cwd = process.cwd(),
-  kpIndex = KP_INDEX, validate = null, maxRepairs = 1,
+  kpIndex = KP_INDEX, validate = null, maxRepairs = 1, call = oneCall,
 }) {
   const started = Date.now();
   const fail = (error) => ({
@@ -251,14 +282,16 @@ async function askTier1({
   let repairs = 0;
   let cost = 0;
   let tokens = 0;
+  let usage = null;
   let lastCompileError = null;
 
   for (let attempt = 0; ; attempt++) {
-    const res = await oneCall({ prompt, model, timeoutMs, cwd });
+    const res = await call({ prompt, model, timeoutMs, cwd });
     if (!res.envelope) return fail(res.error);
     envelope = res.envelope;
     cost += envelope.total_cost_usd ?? 0;
     tokens += sumTokens(envelope.usage);
+    usage = addUsage(usage, envelope.usage);
 
     // An API failure lands in `result` like any other reply. Bail before the
     // repair round: there is nothing to repair, and re-prompting an overloaded
@@ -269,6 +302,7 @@ async function askTier1({
       f.transport_error = te;
       f.cost_usd = cost || null;
       f.tokens = tokens || null;
+      f.usage = usage;
       return f;
     }
 
@@ -288,7 +322,7 @@ async function askTier1({
 
   const run = toRun(parsed, envelope.result);
   run.tokens = tokens || null;
-  run.usage = envelope.usage || null;
+  run.usage = usage;
   run.cost_usd = cost || null;
   run.num_turns = (envelope.num_turns ?? 1) + repairs;
   run.session_id = envelope.session_id || null;
@@ -304,5 +338,6 @@ async function askTier1({
 }
 
 module.exports = {
-  askTier1, buildPrompt, buildRepairPrompt, parseJsonBlock, toRun, AGENT_BIN,
+  askTier1, buildPrompt, buildRepairPrompt, parseJsonBlock, toRun, addUsage,
+  sumTokens, AGENT_BIN,
 };
