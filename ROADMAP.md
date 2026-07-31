@@ -22,9 +22,9 @@ detail on purpose — the reasoning behind them is cited constantly by later wor
 
 ## Status — where we are
 
-**Branch `eval-12-tiering`, 2026-07-30.** Seven commits off `main`, tree clean,
-all gates green at every one. `main` itself carries the whole eval loop: Phase 2
-and Phase 2b were merged as `838de26`.
+**Branch `eval-12-tiering`, 2026-07-31.** Tree clean, all gates green at every
+commit. `main` itself carries the whole eval loop: Phase 2 and Phase 2b were
+merged as `838de26`.
 
 | Commit | What |
 |---|---|
@@ -33,16 +33,22 @@ and Phase 2b were merged as `838de26`.
 | `782b51d` | EVAL-12a / SIMP-1 (the tier-1 lane) |
 | `ead4173` | EVAL-12d (the correlation check) + EVAL-14 (transport failures are not verdicts) |
 | `f915fec` | EVAL-12c (the cache we already had, and the premise that said we didn't) |
+| *pending* | EVAL-12b (impact selection + concurrency) — cite the sha once committed |
+
+**EVAL-12 is closed.** All four levers plus the invariant have shipped.
 
 ### Picked up next, in order
 
-1. **SIMP-5** — with the `--bare`/auth caveat recorded in its section.
-2. **EVAL-12b** (impact selection, concurrency) — the last EVAL-12 lever, with
-   the cold-start interaction noted in its section.
+1. **Run a real sweep with `--select --concurrency 4`** — EVAL-12b's saving is
+   projected, not measured, and the `Prompt cache:` line is the sensor that says
+   whether warm-then-fan-out survived contact. Do this before quoting a number
+   anywhere; see EVAL-12c's first lesson for why that matters.
+2. **SIMP-5** — with the `--bare`/auth caveat recorded in its section.
 3. **EVAL-5 harvesting** — now the binding constraint on the correlation check
    itself: two tier-1 cases is a thin basis for a claim about a whole lane, and
    the check gets more convincing with every case that declares tier 1 — as long
-   as each new one re-runs it.
+   as each new one re-runs it. It is also what makes impact selection worth
+   anything: selecting 2 of 6 cases saves little, selecting 2 of 30 is the point.
 4. **The ROADMAP is current** — no pending write-up.
 
 **Then:** pick a server — INT-1/INT-2 first (both runtime-independent), then
@@ -60,11 +66,15 @@ becomes the bottleneck), Phase 3b and Phase 4.
 
 ### Gates, and how to run them
 
-`npm test` (58 cases, no database, ~1s) → `npm run build` (validation + tier-0
+`npm test` (73 cases, no database, ~1.3s) → `npm run build` (validation + tier-0
 eval checks + write-back; must leave the tree clean) → `npm run eval:check`
 (standalone form of the same tier-0 checks).
 
 - `npm run eval -- --case <name> --runs 1 --no-stamp` — a single live case.
+- `npm run eval -- --select` — only the cases the working tree could have moved
+  (EVAL-12b). Refuses to run with `--live`.
+- `npm run eval -- --concurrency 4` — fan out, after one serial run warms the
+  prompt cache.
 - `npm run eval:correlate` — the cheap-lane validation. Costs 2x the runs of the
   cases it covers, so it rides the schedule, not PRs.
 
@@ -93,7 +103,8 @@ Within Phase 2b: EVAL-7 and EVAL-8 → DONE (the signal-distorting pair;
 measurements from here on are trustworthy). EVAL-9 and EVAL-10 → DONE
 (soundness: no more passing on a number found anywhere, no more cases that
 cannot fail). AGT-3 → DONE. EVAL-11 → DONE, by case conversion. EVAL-13 → 2 of
-3, the third folded into SIMP-2. **Phase 2b is closed except EVAL-12b.**
+3, the third folded into SIMP-2. **Phase 2b is CLOSED** — EVAL-12b was the last
+item in it.
 
 **Both new cases are validated** — evidence:
 `evals/results/2026-07-29T11-08-29Z.jsonl`. They ran end-to-end through an agent,
@@ -156,7 +167,7 @@ passed, $9.66, 6.5M tokens, 24.7 min). Ordered by priority: the first two distor
 the signal the loop exists to produce, so they came before anything else,
 including performance.
 
-**Everything here is DONE except EVAL-12b.**
+**Everything here is DONE** (EVAL-13's third item deliberately, into SIMP-2).
 
 ### EVAL-7 · `must_not_contain` scope — false positive · DONE
 
@@ -336,10 +347,15 @@ dirty-flag bug survived a full set of passing unit tests and was caught only by
 running the harness for real and checking a number against expectation. The
 correlation check ships **with** SIMP-1, not after it.
 
-**Where the levers stand.** (a) is DONE — see EVAL-12a. The invariant is DONE —
-see EVAL-12d, and it earned its keep on its first real run by finding EVAL-14.
-(c) is DONE — and the measurement that closed it showed the lever was already
-ours; see EVAL-12c. (b) and (d) remain, and are now one item: EVAL-12b.
+**Where the levers stand — all four are DONE.** (a) see EVAL-12a. (c) see
+EVAL-12c, where the measurement that closed it showed the lever was already
+ours. (b) and (d) shipped together as EVAL-12b. The invariant is DONE too — see
+EVAL-12d, and it earned its keep on its first real run by finding EVAL-14.
+
+**What that does NOT mean.** Three of the four levers have been measured in the
+wild; EVAL-12b has not. Its projected saving is a projection, and EVAL-12c is
+the standing warning about believing one of those before the sweep has answered
+it.
 
 ### EVAL-12a · Tier 1, the cheap lane · DONE
 
@@ -483,21 +499,116 @@ that keep the one we have.**
 
 Both were queued against a cost driver that turned out not to exist.
 
-### EVAL-12b · Impact selection + concurrency · OPEN (~0.5 day)
+### EVAL-12b · Impact selection + concurrency · DONE
 
-**Now the only remaining EVAL-12 lever.** Unchanged from (b) and (d) above, except
-that with (c) closed this is what is left. Concurrency is a wall-clock win and,
-after EVAL-12c, close to a cost-neutral one.
+**The last EVAL-12 lever, shipped as two opt-in flags** — `--select` and
+`--concurrency <n>` (`evals/lib/select.js`, `evals/lib/pool.js`). A sweep with
+neither flag behaves exactly as it did before, which is deliberate: the same
+rule as `tier:` defaulting to 2 — nothing becomes cheap until someone chooses
+it.
 
-**One interaction to respect when building it.** Parallel workers starting cold
-each pay their own cache creation, so a naive fan-out of N workers buys N cache
-writes of the same ~11k prefix and gives back most of EVAL-12c's 5x. Warm serially
-— one run to completion — then fan out. The `Prompt cache:` summary line is how to
-tell whether the implementation got this right.
+#### Impact selection is a per-case FINGERPRINT, not a git diff
 
-**Impact selection has the same edge in reverse.** A PR that runs 2 cases instead
-of 30 pays the cold start over a much smaller sweep, so the per-run cost of a
-*selected* run is closer to $0.16 than $0.03.
+The roadmap phrased (b) as "cases whose `must_use` intersects the changed
+concepts, plus last run's failures", which needs a baseline ref to diff against.
+It is built as a content hash instead, for three reasons: it needs no ref (so it
+works on uncommitted edits, which is where EVAL-6 already says evals matter
+most), it cannot be fooled by picking the wrong base, and it subsumes "plus last
+run's failures" without a special case — a failure is simply never evidence.
+
+Every result row now carries a `case_fingerprint` over the inputs that case's
+verdict can depend on:
+
+| component | why it is in |
+|---|---|
+| the case file | question, gold query, cross-checks |
+| its `must_use` concepts, plus the `of:` / `subtype_of:` chain | the definitions it routes to. Editing `kp:Customer` can change what `kp:ActiveCustomer`'s membership rule MEANS without touching its file |
+| the routing **surface**: every `uri\|kind\|status` | a concept appearing, disappearing or becoming approved changes what ANY question can route to — including a question whose right answer is "that is not governed" |
+| `kp/agent/examples.md`, `corrections.md` | standing hints the agent acts on; EVAL-8 kept them inside the semantic identity for exactly this reason |
+| `models/`, `CLAUDE.md`, the runtime | shared by every case, so an edit here selects everything — the safe direction |
+
+**Why not just `semantic_identity`?** It is the same idea one size too large: it
+covers the whole repo, so editing one concept changes it and every case is
+re-measured for a definition only one of them routes to. `models_tree` and the
+protocol digest are *passed in* from `semanticIdentity` rather than recomputed —
+two functions that must agree about the same tree is the EVAL-8 shape, and there
+is no reason to have two.
+
+**Why the surface is `uri|kind|status` and not `kp/index.md`.** CLAUDE.md tells
+the agent to read the routing table whole, so the naive move is to digest it. But
+the index is a *projection* of the concept files: digesting it would make every
+definition edit select every case, and the mechanism would do nothing at all.
+What genuinely reaches every case is a concept appearing, disappearing or being
+approved — which is precisely what the surface digest catches.
+
+#### What licenses a skip
+
+A clean, COMPLETE measurement at the same fingerprint, in the same lane, against
+the same data and the same model: at least as many passing runs as this sweep
+would do, and **not one** failing or errored run. The all-or-nothing rule is what
+stops a flaky 4-of-5 being averaged into a pass, and it is where "plus last run's
+failures" comes from for free.
+
+**Three refusals, all because a false skip is invisible — nobody re-reads a case
+that never ran.**
+
+1. **A case with no `must_use` is NEVER skipped.** Its concept dependencies are
+   undeclared, so nothing here can tell whether the definition someone just
+   edited is one it routes to. `must_use` is a declaration of dependency, and
+   only a case that makes one can be selected out. The price today:
+   `refusal-ungoverned` declares none, so the most expensive case in the suite
+   ($0.76-0.91) can never be selected out. That is left standing rather than
+   papered over with a guess about what it depends on.
+2. **`--select` is refused with `--live`.** Live data can move underneath an
+   identical fingerprint, and measuring exactly that is the one thing a drift
+   run exists for.
+3. **A skipped case is recorded on a `kind: selection` meta line, never as a
+   result row** — and `isResultRow` is now shared by the ledger, `eval:report`
+   and the correlation check. Otherwise one sweep's pass would propagate forever
+   through sweeps that never ran the case: evidence manufacturing itself.
+
+`eval:report` reads the same line and reports a skipped case as NOT COMPARED
+rather than as a case that vanished, and the sweep summary prints NOT RE-MEASURED
+next to the pass rate — because "6/6 passed" over a selected sweep means "2
+measured, 4 assumed", and that difference is the whole risk of the feature.
+
+#### Concurrency: warm first, then fan out
+
+Exactly the interaction this section warned about before it was built. `runPool`
+runs job 0 alone to completion — one cache creation for the whole sweep — and
+only then fans out to N workers. `serialize` keeps DuckDB to one query at a time:
+grading queries are milliseconds against the agent's minutes, so the wall-clock
+cost is nil and it removes concurrency as a possible explanation for a verdict,
+which is the whole reason a sweep is worth reading.
+
+#### CI
+
+PRs run `--select`; pushes, schedules and manual dispatches run the full sweep,
+because something has to keep re-measuring the cases a PR was allowed to skip. A
+fresh checkout has no ledger, so a best-effort step downloads the results
+artifact of the last successful run on `main` first; if it is missing, expired or
+the download fails, the ledger is empty and `--select` degrades to a full sweep.
+`--concurrency 4` is on everywhere.
+
+#### What is NOT proven yet, and the shape of the risk
+
+- **No live sweep has run with either flag.** The cost and wall-clock claims are
+  projections, not measurements — which is precisely the mistake EVAL-12c's first
+  lesson records. The `Prompt cache:` line is the sensor: if warm-then-fan-out
+  works, a concurrent sweep still reads most of its prefix tokens rather than
+  writing them. Check it on the first real run before quoting a number.
+- **Skipping caches a STOCHASTIC verdict.** Three passing runs at a fingerprint
+  is evidence, not proof; the product can still fail on the fourth. That is why
+  selection is a PR-level economy and every other trigger re-measures.
+- **The writer half is pinned only by a live sweep.** Ten mutations of
+  `select.js` / `pool.js` were confirmed to go red (drop the stamp stripping, the
+  surface, the hints, the `of:` closure; ignore failing runs; skip on partial
+  evidence; skip an undeclared case; let a selection line count as a result; fan
+  out cold; drop the serialize queue). What no unit test covers is `run.js`
+  actually writing `case_fingerprint` onto each row — the EVAL-8 corollary again,
+  a helper test is not a wiring test. The mitigation is structural rather than
+  tested: `loadLedger` ignores any row without a fingerprint, so that wiring
+  breaking means the feature quietly does nothing, never that it skips wrongly.
 
 ### EVAL-13 · Minor harness fixes · 2 of 3 DONE
 
@@ -512,23 +623,6 @@ of 30 pays the cold start over a much smaller sweep, so the per-run cost of a
 - **`report.js` splits one diagnosis sentence across two `if` chains.**
   **Deliberately NOT fixed:** SIMP-2 replaces all 157 lines of `report.js` with
   `evals/results.malloy`. Folded into SIMP-2.
-
-### Not adopted from the "fastest eval ever" proposals
-
-Recorded so they are not relitigated.
-
-- **A local quantized SLM as the CI agent.** You ship Claude, and protocol
-  behaviour is model-coupled, so an 8B model would pass rules Claude ignores and
-  fail rules Claude follows. Use a smaller model in the same family (Haiku) if a
-  cheap LLM tier is wanted, and validate correlation.
-- **Strict AST equality as the primary query check.** It is stricter than semantic
-  equivalence — the two accepted margin queries in the real session have different
-  trees and identical meaning. Use it only as a fast path: identical AST → pass,
-  else escalate to execution.
-- **Vector/cosine routing as the *test*.** It measures whether definitions are
-  distinguishable in embedding space, not what the agent does. Keep it as a
-  build-time lint for concept pairs too similar to disambiguate (the "too similar"
-  failure mode), never as a merge gate.
 
 ---
 
@@ -921,6 +1015,23 @@ not the table.
 **Tier 1 is for bindings you can aggregate directly; anything whose grain or type
 must be inspected stays tier 2.** Expect this to put fewer than the hoped ~25 of 30
 cases in the cheap lane.
+
+### A mechanism that decides what NOT to measure must fail toward measuring more
+
+From EVAL-12b. Impact selection is the first thing in this repo whose failure
+mode is *silence*: a wrongly skipped case produces no row, no verdict and no
+red, so nothing about it is visible in any report. Everything about the design
+followed from choosing the direction it breaks in — an undeclared dependency
+pays full price, a fingerprint that fails to get written makes the feature do
+nothing rather than skip wrongly, and a skipped case is never a result row so it
+can never become evidence about itself.
+
+The same instinct also says which input NOT to hash. The routing table is what
+the agent reads, so digesting `kp/index.md` looks obviously right — and it would
+have made every definition edit select every case, i.e. a mechanism that always
+returns "measure everything" while looking like it was doing something. It is a
+*projection* of the concept files, not an input. **Fingerprint the sources, not
+the generated view of them.**
 
 ### "Closed in one dimension" is not closed
 

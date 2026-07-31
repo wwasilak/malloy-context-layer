@@ -54,12 +54,37 @@ jobs:
       - name: Install the agent under test
         run: npm install -g @anthropic-ai/claude-code
 
+      # EVAL-12b: impact selection skips a case whose fingerprint already has a
+      # clean measurement, and a fresh checkout has no measurements at all. This
+      # pulls the results of the last successful run on main so a PR has a
+      # ledger to consult. Best effort on purpose: if the artifact is missing,
+      # expired, or the download fails, the ledger is empty and `--select`
+      # degrades to a full sweep — the safe direction, and the same thing that
+      # happens today.
+      - name: Fetch the results ledger from main
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_id=$(gh run list --workflow eval.yml --branch main --status success \
+                     --limit 1 --json databaseId --jq '.[0].databaseId')
+          [ -n "$run_id" ] || exit 0
+          gh run download "$run_id" -n "eval-results-$run_id" -D evals/results
+
+      # --select on PRs only. A push to main, a schedule and a manual dispatch
+      # all run the full sweep: something has to keep re-measuring the cases a
+      # PR was allowed to skip, and the fingerprints are only as good as the
+      # sweep that last confirmed them.
       - name: Run evals against fixtures
         id: sweep
         continue-on-error: true          # <- remove to make the suite blocking
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: npm run eval -- --runs 3
+        run: |
+          extra=''
+          if [ "${{ github.event_name }}" = "pull_request" ]; then extra='--select'; fi
+          npm run eval -- --runs 3 --concurrency 4 $extra
 
       # EVAL-12's invariant: a cheap tier is only trustworthy while it keeps
       # agreeing with the expensive tier it replaces. This runs each tier-1 case

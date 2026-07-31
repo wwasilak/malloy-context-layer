@@ -35,6 +35,7 @@ const { spawn } = require('child_process');
 
 const { loadCases } = require('./lib/cases');
 const { correlate, provenanceProblems, CLASS } = require('./lib/correlate');
+const { isResultRow } = require('./lib/select');
 
 const RESULTS_DIR = process.env.EVAL_RESULTS_DIR || path.join('evals', 'results');
 const CORRELATION_DIR = path.join(RESULTS_DIR, 'correlation');
@@ -45,7 +46,7 @@ const RUNNER = path.join(__dirname, 'run.js');
 const OBSERVED = { tier1: '$0.12-0.17', tier2: '$0.20-0.90' };
 
 function parseArgs(argv) {
-  const a = { case: null, all: false, runs: 3, quorum: null, model: null, timeout: null, maxTurns: null, from: null, quiet: false };
+  const a = { case: null, all: false, runs: 3, quorum: null, model: null, timeout: null, maxTurns: null, concurrency: null, from: null, quiet: false };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     const next = () => argv[++i];
@@ -56,6 +57,7 @@ function parseArgs(argv) {
     else if (k === '--model') a.model = next();
     else if (k === '--timeout') a.timeout = next();
     else if (k === '--max-turns') a.maxTurns = next();
+    else if (k === '--concurrency') a.concurrency = next();
     else if (k === '--from') a.from = next();
     else if (k === '--quiet') a.quiet = true;
     else if (k === '--help' || k === '-h') { printHelp(); process.exit(0); }
@@ -77,6 +79,8 @@ correlation check (EVAL-12) — does tier 1 decide cases the way tier 2 does?
   --runs <n>       runs per lane (default 3) — the bill is 2n agent runs/case
   --quorum <n>     passing runs required per lane (default: all of them)
   --model <id>     model for the agent under test, both lanes
+  --concurrency <n>
+                   agent calls in flight, applied identically to both lanes
   --from <a,b>     compare existing result files instead of running anything
   --quiet          summary only
 `);
@@ -91,7 +95,7 @@ function loadFile(file) {
     let o;
     try { o = JSON.parse(t); } catch { continue; }
     if (o.kind === 'run_meta') meta = o;
-    else rows.push(o);
+    else if (isResultRow(o)) rows.push(o);
   }
   return { file, meta, rows };
 }
@@ -108,6 +112,9 @@ function runLane(tier, { cases, args, dir }) {
     if (args.model) argv.push('--model', args.model);
     if (args.timeout) argv.push('--timeout', args.timeout);
     if (args.maxTurns) argv.push('--max-turns', args.maxTurns);
+    // Applied to BOTH lanes or neither: the comparison only means something
+    // while the lanes differ in tools and turns and nothing else (EVAL-12a).
+    if (args.concurrency) argv.push('--concurrency', args.concurrency);
     if (args.quiet) argv.push('--quiet');
 
     console.log(`\n=== lane: tier ${tier} =====================================`);

@@ -17,6 +17,7 @@
 //     npm run eval -- --case aov-synonym
 //     npm run eval -- --live
 //     npm run eval -- --model claude-opus-5 --runs 3
+//     npm run eval -- --select --concurrency 4
 // =============================================================================
 const fs = require('fs');
 const path = require('path');
@@ -28,6 +29,8 @@ const { askTier1 } = require('./lib/tier1');
 const { grade } = require('./lib/grade');
 const { semanticIdentity } = require('./lib/identity');
 const { setFrontmatterField } = require('./lib/stamp');
+const { planeContext, selectCases, loadLedger } = require('./lib/select');
+const { runPool, serialize } = require('./lib/pool');
 const okf = require('../okf-lib');
 
 const KP_DIR = process.env.KP_DIR || 'kp';
@@ -39,6 +42,7 @@ function parseArgs(argv) {
     case: null, live: false, model: null, runs: 3, quorum: null,
     timeout: 300000, stamp: !process.env.CI, maxTurns: 30, rowLimit: 200, quiet: false,
     tier: null,   // null = each case runs in the lane it declares
+    concurrency: 1, select: false,   // both opt-in (EVAL-12b)
   };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
@@ -51,6 +55,8 @@ function parseArgs(argv) {
     else if (k === '--timeout') a.timeout = parseInt(next(), 10) * 1000;
     else if (k === '--max-turns') a.maxTurns = parseInt(next(), 10);
     else if (k === '--tier') a.tier = parseInt(next(), 10);
+    else if (k === '--concurrency') a.concurrency = parseInt(next(), 10);
+    else if (k === '--select') a.select = true;
     else if (k === '--stamp') a.stamp = true;
     else if (k === '--no-stamp') a.stamp = false;
     else if (k === '--quiet') a.quiet = true;
@@ -59,6 +65,12 @@ function parseArgs(argv) {
   }
   if (!Number.isFinite(a.runs) || a.runs < 1) throw new Error('--runs must be >= 1');
   if (a.tier != null && a.tier !== 1 && a.tier !== 2) throw new Error('--tier must be 1 or 2');
+  if (!Number.isFinite(a.concurrency) || a.concurrency < 1) throw new Error('--concurrency must be >= 1');
+  // EVAL-12b: a fingerprint covers the committed fixtures by content. Live data
+  // can move underneath an identical fingerprint, so past evidence says nothing
+  // about today's live numbers — which is the one thing a drift run exists to
+  // measure. Refuse rather than skip.
+  if (a.select && a.live) throw new Error('--select cannot be used with --live: a drift run must measure the data, and the data is not fingerprinted');
   // EVAL-13: `last_validated` claims a governed answer was verified against the
   // committed fixtures. A --live run measures drift against data nobody has
   // pinned, so it must never write that claim back into kp/ — not even when
@@ -85,6 +97,11 @@ eval runner (EVAL-1)
                      declares. Tier 1 is one call with no tools; tier 2 is the
                      full agentic run. Used by the correlation check to run the
                      same case both ways.
+  --select           run only the cases a change could have moved: skip any
+                     case already measured clean at its current fingerprint
+                     (EVAL-12b). Never valid with --live.
+  --concurrency <n>  agent calls in flight (default 1). The first run is always
+                     serial, to warm the shared prompt cache before fanning out.
   --no-stamp         do not write last_validated (implied by CI and by --live)
   --quiet            summary only
 `);
@@ -138,7 +155,10 @@ async function askWithRetry(fn, { quiet }) {
   const workdir = mal.workdirFor(mode);
   const index = await mal.buildSourceIndex(workdir);
   const versions = mal.runtimeVersions();
-  const ctx = { runQuery: (q) => mal.runQuery(q, { workdir, index, rowLimit: args.rowLimit }) };
+  // One query at a time even under --concurrency: grading queries are
+  // milliseconds against the agent's minutes, so serialising them costs no wall
+  // clock and keeps the data path identical to a serial sweep.
+  const ctx = { runQuery: serialize((q) => mal.runQuery(q, { workdir, index, rowLimit: args.rowLimit })) };
 
   // provenance (EVAL-6)
   const ident = semanticIdentity({ kpDir: KP_DIR, modelsDir: mal.MODELS_DIR, runtimeSettings: versions });
@@ -155,10 +175,43 @@ async function askWithRetry(fn, { quiet }) {
   } catch { /* non-fatal: provenance detail, not a gate */ }
 
   const laneOf = (c) => args.tier ?? c.tier;
-  const lanes = `${cases.filter((c) => laneOf(c) === 1).length} tier-1, ${cases.filter((c) => laneOf(c) === 2).length} tier-2`;
-  console.log(`Eval: ${cases.length} case(s) x ${args.runs} run(s), quorum ${args.quorum}/${args.runs} (${lanes}${args.tier ? ', forced' : ''})`);
-  console.log(`Agent: ${AGENT_BIN}${args.model ? ' (' + args.model + ')' : ''} | data: ${dataSource}`);
+
+  // ---- impact selection (EVAL-12b) ------------------------------------------
+  // The fingerprint is computed for EVERY case whether or not --select is on:
+  // it rides on every result row, which is what turns this sweep into evidence
+  // for the next one. Only the decision to act on it is opt-in.
+  const bundle = okf.loadBundle(KP_DIR);
+  const plane = planeContext({
+    kpDir: KP_DIR,
+    canon: bundle.canon,
+    modelsDigest: ident.components.models_tree,
+    protocolDigest: ident.components.protocol,
+    runtimeSettings: versions,
+  });
+  const selection = selectCases(cases, {
+    ctx: plane,
+    ledger: args.select ? loadLedger(RESULTS_DIR) : null,
+    runs: args.runs,
+    laneOf,
+    dataSource,
+    modelId: args.model || 'default',
+  });
+  const decision = Object.fromEntries(selection.map((s) => [s.case, s]));
+  for (const c of cases) c._fingerprint = decision[c.name].fingerprint;
+
+  const skipped = selection.filter((s) => s.skip);
+  const toRun = cases.filter((c) => !decision[c.name].skip);
+
+  const lanes = `${toRun.filter((c) => laneOf(c) === 1).length} tier-1, ${toRun.filter((c) => laneOf(c) === 2).length} tier-2`;
+  console.log(`Eval: ${toRun.length} case(s) x ${args.runs} run(s), quorum ${args.quorum}/${args.runs} (${lanes}${args.tier ? ', forced' : ''})`);
+  console.log(`Agent: ${AGENT_BIN}${args.model ? ' (' + args.model + ')' : ''} | data: ${dataSource}` +
+    (args.concurrency > 1 ? ` | concurrency ${args.concurrency}` : ''));
   console.log(`Semantic identity: ${ident.semantic_identity.slice(0, 23)}…${ident.components.dirty ? ' (working tree dirty)' : ''}`);
+  if (args.select) {
+    console.log(`Selection: ${toRun.length}/${cases.length} selected, ${skipped.length} skipped as unchanged`);
+    for (const s of selection.filter((x) => !x.skip))
+      console.log(`  run  ${s.case.padEnd(32)} ${s.reason}`);
+  }
   console.log('');
 
   fs.mkdirSync(RESULTS_DIR, { recursive: true });
@@ -167,18 +220,34 @@ async function askWithRetry(fn, { quiet }) {
   const write = (o) => out.write(JSON.stringify(o) + '\n');
 
   write({
-    kind: 'run_meta', ts: new Date().toISOString(), cases: cases.length, runs: args.runs,
+    kind: 'run_meta', ts: new Date().toISOString(), cases: toRun.length, runs: args.runs,
     quorum: args.quorum, model_id: args.model || 'default', agent: AGENT_BIN,
     tier_override: args.tier ?? null,
+    select: args.select, concurrency: args.concurrency,
     data_source: dataSource, semantic_identity: ident.semantic_identity,
     identity_components: ident.components, runtime: versions,
   });
+
+  // What was NOT measured, and on what evidence. A meta line rather than a
+  // result row on purpose: a skipped case must never be readable back as a
+  // measurement of itself, or one sweep's pass would propagate forever through
+  // sweeps that never ran it.
+  if (args.select) {
+    write({
+      kind: 'selection', ts: new Date().toISOString(),
+      selected: toRun.map((c) => c.name),
+      skipped: skipped.map((s) => ({
+        case: s.case, tier: s.tier, fingerprint: s.fingerprint,
+        reason: s.reason, evidence: s.evidence ? { ...s.evidence } : null,
+      })),
+    });
+  }
 
   // gold values: prefer the number committed in the case file; compute in
   // memory when it is missing so the loop is usable before `eval:gold` has been
   // run, but record WHICH so an unaudited gold is never mistaken for a blessed
   // one.
-  for (const c of cases) {
+  for (const c of toRun) {
     c._gold_source = 'case-file';
     if (c.expect_kind === 'numeric' && c.expect_value == null && c.gold_runs.length) {
       try {
@@ -202,131 +271,145 @@ async function askWithRetry(fn, { quiet }) {
   // reported.
   const cache = { read: 0, created: 0, runs: 0, warm: 0 };
 
+  // One job per (case x run). Ordered case-major, run-minor — the same order a
+  // serial sweep used, which matters because job 0 is the one that warms the
+  // prompt cache for every job behind it (EVAL-12b).
+  const jobs = [];
+  for (const c of toRun) for (let i = 1; i <= args.runs; i++) jobs.push({ c, i });
+
+  // Per-case tallies, filled as jobs land. Under --concurrency the runs of one
+  // case no longer finish together, so the case verdict is printed when its
+  // last run reports rather than at the bottom of a loop.
+  const tally = new Map(toRun.map((c) => [c.name, { verdicts: [], errored: 0, pending: args.runs }]));
   const caseResults = [];
-  for (const c of cases) {
-    const verdicts = [];   // completed runs only
-    let errored = 0;       // runs that never produced an answer (see askWithRetry)
+
+  await runPool(jobs, args.concurrency, async ({ c, i }) => {
+    const t = tally.get(c.name);
     // Which lane. `--tier` overrides so the correlation check can run a
     // tier-1 case through tier 2 and compare verdicts.
     const tier = args.tier ?? c.tier;
-    for (let i = 1; i <= args.runs; i++) {
-      const res = await askWithRetry(() => (tier === 1
-        ? askTier1({
-          question: c.question, model: args.model, timeoutMs: args.timeout,
-          // the repair round compiles against the SAME executor the grade uses
-          validate: async (q) => {
-            try { await ctx.runQuery(q); return null; } catch (e) { return e.message || String(e); }
-          },
-        })
-        : ask({
-          question: c.question, model: args.model,
-          maxTurns: args.maxTurns, timeoutMs: args.timeout,
-        })), { quiet: args.quiet });
-      let g;
-      try {
-        g = await grade(c, res, ctx);
-      } catch (e) {
-        g = {
-          pass: false, kind_pass: false, matches: null,
-          detail: `grader error: ${e.message || e}`,
-          extracted: null, receipt_present: false, cross_checks: [],
-        };
-      }
-      if (g.errored) errored++;
-      else verdicts.push(g.pass);
+    const res = await askWithRetry(() => (tier === 1
+      ? askTier1({
+        question: c.question, model: args.model, timeoutMs: args.timeout,
+        // the repair round compiles against the SAME executor the grade uses
+        validate: async (q) => {
+          try { await ctx.runQuery(q); return null; } catch (e) { return e.message || String(e); }
+        },
+      })
+      : ask({
+        question: c.question, model: args.model,
+        maxTurns: args.maxTurns, timeoutMs: args.timeout,
+      })), { quiet: args.quiet });
+    let g;
+    try {
+      g = await grade(c, res, ctx);
+    } catch (e) {
+      g = {
+        pass: false, kind_pass: false, matches: null,
+        detail: `grader error: ${e.message || e}`,
+        extracted: null, receipt_present: false, cross_checks: [],
+      };
+    }
+    if (g.errored) t.errored++;
+    else t.verdicts.push(g.pass);
 
-      if (res.usage) {
-        cache.runs++;
-        cache.read += res.usage.cache_read_input_tokens || 0;
-        cache.created += res.usage.cache_creation_input_tokens || 0;
-        // "Warm" = this run wrote no cache at all, so it paid read prices for
-        // the whole prefix. Only reachable in tier 1: a tier-2 session grows its
-        // own context every turn and always has something new to write.
-        if (!(res.usage.cache_creation_input_tokens || 0)) cache.warm++;
-      }
-
-      write({
-        ts: new Date().toISOString(),
-        case: c.name,
-        category: c.category,
-        run: i,
-        pass: g.pass,
-        // The run never answered (API error, exhausted retries). Not a verdict:
-        // consumers must exclude it rather than read it as a failing case.
-        errored: g.errored === true,
-        attempts: res.attempts ?? 1,
-        expect_kind: c.expect_kind,
-        // which lane produced this row, and whether it was forced (EVAL-12a).
-        // A pass rate is not comparable across tiers, so the tier has to travel
-        // with the row or the report will average two different measurements.
-        tier,
-        tier_declared: c.tier,
-        tier1_concepts: res.tier1_concepts || null,
-        // repair rounds spent (tier 1). Always needing one is a signal about
-        // the protocol's dialect guidance, not about the harness.
-        repairs: res.repairs ?? null,
-        last_compile_error: res.last_compile_error || null,
-        grade_detail: g.detail,
-        // Which layer decided the verdict, and how strong the result-set match
-        // was. Structured because the correlation check compares REASONS across
-        // lanes, and a prose sentence is not a comparison key.
-        kind_pass: g.kind_pass ?? null,
-        match_tiers: g.matches ? g.matches.map((m) => m.match) : null,
-        agent_answer_excerpt: String(res.answer || '').slice(0, 1200),
-        executed_malloy: (res.executedMalloy || []).join('\n---\n').slice(0, 4000),
-        extracted_value: g.extracted,
-        expect_value: c.expect_value,
-        gold_source: c._gold_source,
-        receipt_present: g.receipt_present,
-        // The evidence behind a cross-check verdict: which pattern, in which
-        // artifact, with the surrounding text (EVAL-7). A failure that cannot be
-        // adjudicated from its own row costs a manual transcript re-read.
-        cross_checks: g.cross_checks || [],
-        must_use: c.must_use,
-        tool_calls: (res.toolCalls || []).length,
-        malloy_tool_calls: res.malloy_tool_calls ?? null,
-        tokens: res.tokens,
-        // The breakdown, not just the total. Tier 1 cut tokens 7-14x but cost
-        // only ~2x, and the reason is only visible here: a long tier-2 session
-        // READS its cached prefix, while every tier-1 run is a fresh process
-        // that CREATES one. Without this split the next person re-derives that
-        // from scratch.
-        usage: res.usage
-          ? {
-            input: res.usage.input_tokens ?? null,
-            output: res.usage.output_tokens ?? null,
-            cache_read: res.usage.cache_read_input_tokens ?? null,
-            cache_creation: res.usage.cache_creation_input_tokens ?? null,
-          }
-          : null,
-        cost_usd: res.cost_usd ?? null,
-        latency_ms: res.latency_ms,
-        num_turns: res.num_turns ?? null,
-        agent_error: res.error || null,
-        semantic_identity: ident.semantic_identity,
-        model_id: args.model || 'default',
-        runtime: `${AGENT_BIN} | malloy ${versions.malloy} | duckdb ${versions.duckdb}`,
-        data_source: dataSource,
-      });
-
-      if (!args.quiet)
-        console.log(`  ${g.errored ? 'ERR ' : g.pass ? 'PASS' : 'FAIL'}  ${c.name} [${i}/${args.runs}] — ${g.detail}`);
+    if (res.usage) {
+      cache.runs++;
+      cache.read += res.usage.cache_read_input_tokens || 0;
+      cache.created += res.usage.cache_creation_input_tokens || 0;
+      // "Warm" = this run wrote no cache at all, so it paid read prices for
+      // the whole prefix. Only reachable in tier 1: a tier-2 session grows its
+      // own context every turn and always has something new to write.
+      if (!(res.usage.cache_creation_input_tokens || 0)) cache.warm++;
     }
 
-    const passed = verdicts.filter(Boolean).length;
+    write({
+      ts: new Date().toISOString(),
+      case: c.name,
+      category: c.category,
+      run: i,
+      pass: g.pass,
+      // The run never answered (API error, exhausted retries). Not a verdict:
+      // consumers must exclude it rather than read it as a failing case.
+      errored: g.errored === true,
+      attempts: res.attempts ?? 1,
+      expect_kind: c.expect_kind,
+      // which lane produced this row, and whether it was forced (EVAL-12a).
+      // A pass rate is not comparable across tiers, so the tier has to travel
+      // with the row or the report will average two different measurements.
+      tier,
+      tier_declared: c.tier,
+      tier1_concepts: res.tier1_concepts || null,
+      // repair rounds spent (tier 1). Always needing one is a signal about
+      // the protocol's dialect guidance, not about the harness.
+      repairs: res.repairs ?? null,
+      last_compile_error: res.last_compile_error || null,
+      grade_detail: g.detail,
+      // Which layer decided the verdict, and how strong the result-set match
+      // was. Structured because the correlation check compares REASONS across
+      // lanes, and a prose sentence is not a comparison key.
+      kind_pass: g.kind_pass ?? null,
+      match_tiers: g.matches ? g.matches.map((m) => m.match) : null,
+      agent_answer_excerpt: String(res.answer || '').slice(0, 1200),
+      executed_malloy: (res.executedMalloy || []).join('\n---\n').slice(0, 4000),
+      extracted_value: g.extracted,
+      expect_value: c.expect_value,
+      gold_source: c._gold_source,
+      receipt_present: g.receipt_present,
+      // The evidence behind a cross-check verdict: which pattern, in which
+      // artifact, with the surrounding text (EVAL-7). A failure that cannot be
+      // adjudicated from its own row costs a manual transcript re-read.
+      cross_checks: g.cross_checks || [],
+      must_use: c.must_use,
+      // EVAL-12b: the inputs this verdict depended on, hashed. A later sweep
+      // matching it can skip the case; it is written whether or not --select
+      // is on, because a row with no fingerprint is a row nothing can reuse.
+      case_fingerprint: c._fingerprint,
+      tool_calls: (res.toolCalls || []).length,
+      malloy_tool_calls: res.malloy_tool_calls ?? null,
+      tokens: res.tokens,
+      // The breakdown, not just the total. Tier 1 cut tokens 7-14x but cost
+      // only ~2x, and the reason is only visible here: a long tier-2 session
+      // READS its cached prefix, while every tier-1 run is a fresh process
+      // that CREATES one. Without this split the next person re-derives that
+      // from scratch.
+      usage: res.usage
+        ? {
+          input: res.usage.input_tokens ?? null,
+          output: res.usage.output_tokens ?? null,
+          cache_read: res.usage.cache_read_input_tokens ?? null,
+          cache_creation: res.usage.cache_creation_input_tokens ?? null,
+        }
+        : null,
+      cost_usd: res.cost_usd ?? null,
+      latency_ms: res.latency_ms,
+      num_turns: res.num_turns ?? null,
+      agent_error: res.error || null,
+      semantic_identity: ident.semantic_identity,
+      model_id: args.model || 'default',
+      runtime: `${AGENT_BIN} | malloy ${versions.malloy} | duckdb ${versions.duckdb}`,
+      data_source: dataSource,
+    });
+
+    if (!args.quiet)
+      console.log(`  ${g.errored ? 'ERR ' : g.pass ? 'PASS' : 'FAIL'}  ${c.name} [${i}/${args.runs}] — ${g.detail}`);
+
+    if (--t.pending > 0) return;   // more runs of this case still in flight
+
+    const passed = t.verdicts.filter(Boolean).length;
     // An errored run is a hole in the sample, and a case cannot pass through a
     // hole: with fewer completed runs than the quorum there is no quorum. This
     // is deliberately stricter than "score what we have" — a smaller sample
     // silently satisfying the same quorum is how a flaky API becomes a green
     // suite.
-    const casePass = errored === 0 && passed >= args.quorum;
+    const casePass = t.errored === 0 && passed >= args.quorum;
     caseResults.push({
       name: c.name, category: c.category, pass: casePass, passed,
-      total: args.runs, errored, must_use: c.must_use, tier,
+      total: args.runs, errored: t.errored, must_use: c.must_use, tier,
     });
     console.log(`${casePass ? 'PASS' : 'FAIL'}  ${c.name} (${passed}/${args.runs}` +
-      `${errored ? `, ${errored} never answered` : ''}) [tier ${tier}]`);
-  }
+      `${t.errored ? `, ${t.errored} never answered` : ''}) [tier ${tier}]`);
+  });
 
   // Wait for the flush. process.exit() below would otherwise discard whatever
   // is still buffered, and a truncated results file is worse than none: the
@@ -344,7 +427,6 @@ async function askWithRetry(fn, { quiet }) {
   // verified", not "someone looked at it".
   let stamped = 0;
   if (args.stamp) {
-    const bundle = okf.loadBundle(KP_DIR);
     const validated = new Set();
     for (const r of caseResults) if (r.pass) r.must_use.forEach((u) => validated.add(u));
     for (const uri of validated) {
@@ -371,6 +453,14 @@ async function askWithRetry(fn, { quiet }) {
   for (const [cat, v] of Object.entries(byCat).sort())
     console.log(`  ${cat.padEnd(16)} ${v.p}/${v.n}`);
 
+  // Said in the same breath as the pass rate, because "6/6 passed" over a
+  // selected sweep means "2 measured, 4 assumed" and the difference is the
+  // whole risk of this feature.
+  if (skipped.length) {
+    console.log(`  NOT RE-MEASURED — ${skipped.length} case(s) skipped, unchanged since a clean run:`);
+    for (const s of skipped) console.log(`    ${s.case.padEnd(32)} ${s.reason}`);
+  }
+
   if (cache.runs && cache.read + cache.created) {
     const reuse = cache.read / (cache.read + cache.created);
     console.log(`Prompt cache: ${Math.round(reuse * 100)}% of prefix tokens read, not written` +
@@ -381,7 +471,7 @@ async function askWithRetry(fn, { quiet }) {
   else if (args.stampSuppressed) console.log('last_validated NOT stamped — --live data is not the pinned fixtures');
   console.log(`Results: ${outFile}`);
 
-  const unaudited = cases.filter((c) => c._gold_source === 'computed-at-runtime');
+  const unaudited = toRun.filter((c) => c._gold_source === 'computed-at-runtime');
   if (unaudited.length)
     console.log(`\nNote: gold computed at runtime for ${unaudited.map((c) => c.name).join(', ')} — run 'npm run eval:gold' to commit those numbers.`);
 

@@ -22,6 +22,9 @@ npm run eval -- --model claude-opus-5
 npm run eval -- --tier 1          # force every case into the cheap lane
 npm run eval:correlate            # run each tier-1 case in BOTH lanes and compare
 
+npm run eval -- --select          # only the cases this change could have moved
+npm run eval -- --concurrency 4   # 4 agent calls in flight (first run stays serial)
+
 npm run eval:gold                 # (re)compute expect_value from each gold_query
 npm run eval:check                # verify cases parse + gold has not drifted (no agent)
 npm run eval:report               # pass rate by category + flips vs the previous run
@@ -237,6 +240,81 @@ forced-tier sweep sitting beside normal sweeps would be diffed against one by
 
 It rides the scheduled and manually dispatched CI runs, not PRs: it costs twice
 the runs of the cases it covers.
+
+## Running less, and running it in parallel (EVAL-12b)
+
+Both are opt-in. A sweep with neither flag behaves exactly as it did before.
+
+### `--select` — skip what a change could not have moved
+
+Every result row carries a **case fingerprint**: a hash of the inputs that
+case's verdict can depend on.
+
+| in the fingerprint | why |
+|---|---|
+| the case file | question, gold query, cross-checks |
+| its `must_use` concepts, plus their `of:` / `subtype_of:` chain | the definitions it routes to. Editing `kp:Customer` can change what `kp:ActiveCustomer`'s membership rule *means* without touching its file |
+| the routing **surface** — every `uri\|kind\|status` | a concept appearing, disappearing or becoming approved changes what *any* question can route to, including a question whose right answer is "that is not governed" |
+| `kp/agent/examples.md`, `corrections.md` | standing hints the agent acts on (the same reason EVAL-8 keeps them inside the semantic identity) |
+| `models/`, `CLAUDE.md`, the runtime | shared by every case, so any edit here selects everything |
+
+`--select` then skips a case when the ledger of past result files already holds
+a **clean, complete** measurement at its current fingerprint, in the same lane,
+against the same data and the same model: enough passing runs, and **not one**
+failing or errored run. "Plus last run's failures" needs no special handling —
+a failure is simply never evidence, which also stops a flaky 4-of-5 from being
+averaged into a pass.
+
+Why a per-case fingerprint rather than `semantic_identity` (EVAL-6): the
+identity covers the whole repo, so editing one concept changes it and every case
+would be re-measured for a definition only one of them routes to. This is the
+same idea narrowed to one case.
+
+Three refusals, all because a false skip is invisible:
+
+- **A case with no `must_use` is never skipped.** Its concept dependencies are
+  undeclared, so nothing can tell whether the definition someone just edited is
+  one it routes to. `must_use` is a declaration of dependency, and only a case
+  that makes one can be selected out. `refusal-ungoverned` declares none and so
+  always runs.
+- **`--select` is refused with `--live`.** Live data can move underneath an
+  identical fingerprint, and measuring exactly that is what a drift run is for.
+- **The routing surface is `uri|kind|status`, not the generated `kp/index.md`.**
+  The index is a projection of the concept files, so digesting it whole would
+  make every definition edit select every case and the mechanism would do
+  nothing at all.
+
+Skipped cases are recorded on a `kind: selection` meta line, never as result
+rows — a skipped case must not be readable back as a measurement of itself, or
+one sweep's pass would propagate forever through sweeps that never ran it. The
+sweep summary says `NOT RE-MEASURED` next to the pass rate, because "6/6
+passed" over a selected sweep means "2 measured, 4 assumed". `eval:report`
+reads the same line and reports skipped cases as `NOT COMPARED` rather than as
+cases that vanished.
+
+Rows written before this existed carry no fingerprint and are ignored, so the
+first sweep after adopting `--select` selects everything. A wiring bug that
+stopped the fingerprint being written would have the same effect — the feature
+would quietly do nothing, which is the safe direction for it to fail in.
+
+### `--concurrency <n>` — fan out, but warm first
+
+Runs are independent samples and the grader shares no state, so parallelism is
+a straight wall-clock win. Two details are not optional:
+
+- **The first job runs alone.** Prompt caching (EVAL-12c) is content-keyed on
+  the shared prefix: the first call pays ~13k tokens of cache *creation* and
+  every call behind it reads the same prefix for ~5x less. Start N workers cold
+  and all N write their own copy of that prefix. The `Prompt cache:` line in the
+  sweep summary is how you check this is still working — a healthy sweep reads
+  most of its prefix tokens rather than writing them.
+- **Malloy queries stay serialised.** Grading queries are milliseconds against
+  the agent's minutes, so queueing them costs no wall clock and removes
+  concurrency as a possible explanation for a verdict.
+
+Impact selection has the cache interaction in reverse: a PR that runs 2 cases
+instead of 30 pays the cold start over a much smaller sweep, so the per-run cost
+of a *selected* run is closer to $0.16 than $0.03.
 
 ## Anchored ground truth (EVAL-2)
 
@@ -465,6 +543,12 @@ the run refuses to start if `CLAUDE.md` has uncommitted changes.
   Promote it to blocking by deleting that one line, once the pass rate is green
   and stable. A stochastic suite that blocks merges on day one gets switched off
   within a week.
+- **PRs run `--select`; pushes, schedules and manual dispatches do not.**
+  Something has to keep re-measuring the cases a PR was allowed to skip, and a
+  fingerprint is only as good as the sweep that last confirmed it. A fresh
+  checkout has no ledger, so a best-effort step downloads the results artifact
+  of the last successful run on `main` first; if that fails, `--select`
+  degrades to a full sweep.
 - **The correlation check** runs in the same job on schedule and manual
   dispatch only. Promote it to blocking together with the sweep.
 

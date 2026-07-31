@@ -31,6 +31,11 @@ const { loadCase, DEFAULT_TIER } = require('../evals/lib/cases');
 const {
   correlate, classify, laneVerdict, verdictFor, reasonKey, provenanceProblems, CLASS,
 } = require('../evals/lib/correlate');
+const {
+  planeContext, caseFingerprint, selectCases, evidenceKey, isResultRow, surfaceDigest,
+  conceptDeps,
+} = require('../evals/lib/select');
+const { runPool, serialize } = require('../evals/lib/pool');
 
 // ---- porcelainPaths (EVAL-8 regression) -------------------------------------
 // `git status --porcelain` emits `XY PATH`. X or Y is very often a space, so
@@ -559,4 +564,239 @@ test('classify and verdictFor agree on which direction is dangerous', () => {
   assert.match(verdictFor(CLASS.FALSE_GREEN, 1).note, /certifies behaviour the real agent does not exhibit/);
   assert.strictEqual(verdictFor(CLASS.AGREE_PASS, 1).establishes, true);
   assert.strictEqual(verdictFor(CLASS.AGREE_PASS, 2).establishes, false);
+});
+
+// ---- impact selection (EVAL-12b) ---------------------------------------------
+// Every test here is a way the fingerprint could miss a change, and a missed
+// change means a case is skipped while the thing it tests is broken. That is a
+// FALSE GREEN arrived at without even running the suite, so the bar is: name
+// each input a verdict can depend on, and prove that moving it moves the hash.
+const fs = require('node:fs');
+const os = require('node:os');
+const nodePath = require('node:path');
+
+function fixture() {
+  const root = fs.mkdtempSync(nodePath.join(os.tmpdir(), 'kp-select-'));
+  const kp = nodePath.join(root, 'kp');
+  const w = (rel, text) => {
+    const p = nodePath.join(kp, rel);
+    fs.mkdirSync(nodePath.dirname(p), { recursive: true });
+    fs.writeFileSync(p, text);
+    return p;
+  };
+  w('agent/examples.md', '# examples\n');
+  w('agent/corrections.md', '# corrections\n');
+  const casePath = w('agent/evals/aov.md', '---\ntype: eval\n---\nbody\n');
+  w('sales/aov.md', '---\nuri: kp:AOV\nlast_validated: 2026-07-01\n---\nAverage revenue per order.\n');
+  w('sales/order.md', '---\nuri: kp:Order\n---\nAn order.\n');
+  w('sales/margin.md', '---\nuri: kp:Margin\n---\nRevenue minus cost.\n');
+
+  const canon = {
+    'kp:AOV': { kind: 'measure', status: 'approved', _path: nodePath.join('sales', 'aov.md'), of: 'kp:Order' },
+    'kp:Order': { kind: 'entity', status: 'approved', _path: nodePath.join('sales', 'order.md') },
+    'kp:Margin': { kind: 'measure', status: 'approved', _path: nodePath.join('sales', 'margin.md') },
+  };
+  const ctx = (over = {}) => planeContext({
+    kpDir: kp,
+    canon: over.canon || canon,
+    modelsDigest: over.modelsDigest || 'MODELS',
+    protocolDigest: over.protocolDigest || 'PROTOCOL',
+    runtimeSettings: over.runtimeSettings || { malloy: '0.0.403' },
+  });
+  const kase = { name: 'aov', _path: casePath, must_use: ['kp:AOV'], tier: 1 };
+  return { root, kp, w, canon, ctx, kase };
+}
+
+test('the fingerprint moves when the case file, its concept, or that concept\'s entity moves', () => {
+  const f = fixture();
+  const before = caseFingerprint(f.kase, f.ctx());
+
+  f.w('sales/aov.md', '---\nuri: kp:AOV\n---\nTotal sales over order count, EXCLUDING refunds.\n');
+  const afterConcept = caseFingerprint(f.kase, f.ctx());
+  assert.notStrictEqual(afterConcept, before, 'a definition edit must select the case');
+
+  // `of:` is part of what a measure means — edit the entity and the measure can
+  // mean something different without its own file changing a byte.
+  f.w('sales/order.md', '---\nuri: kp:Order\n---\nAn order, now excluding cancellations.\n');
+  assert.notStrictEqual(caseFingerprint(f.kase, f.ctx()), afterConcept);
+
+  fs.writeFileSync(f.kase._path, '---\ntype: eval\n---\ndifferent question\n');
+  assert.notStrictEqual(caseFingerprint(f.kase, f.ctx()), afterConcept);
+});
+
+test('a stamp is not a change — last_validated must not select the case', () => {
+  // Otherwise every sweep invalidates its own evidence and nothing is ever
+  // skipped twice: the EVAL-8 false signal, wearing a new hat.
+  const f = fixture();
+  const before = caseFingerprint(f.kase, f.ctx());
+  f.w('sales/aov.md', '---\nuri: kp:AOV\nlast_validated: 2026-07-31\n---\nAverage revenue per order.\n');
+  assert.strictEqual(caseFingerprint(f.kase, f.ctx()), before);
+});
+
+test('an unrelated concept edit does NOT select the case — the point of the whole thing', () => {
+  const f = fixture();
+  const before = caseFingerprint(f.kase, f.ctx());
+  f.w('sales/margin.md', '---\nuri: kp:Margin\n---\nRevenue minus cost, at line grain.\n');
+  assert.strictEqual(caseFingerprint(f.kase, f.ctx()), before);
+});
+
+test('a concept appearing, or becoming approved, selects EVERY case', () => {
+  // What any question can route to just changed, including questions whose
+  // right answer is "that is not governed". This is why the surface digest is
+  // uri|kind|status and not the definitions.
+  const f = fixture();
+  const before = caseFingerprint(f.kase, f.ctx());
+  const added = { ...f.canon, 'kp:CLV': { kind: 'measure', status: 'approved', _path: 'sales/clv.md' } };
+  assert.notStrictEqual(caseFingerprint(f.kase, f.ctx({ canon: added })), before);
+
+  const promoted = { ...f.canon, 'kp:Margin': { ...f.canon['kp:Margin'], status: 'draft' } };
+  assert.notStrictEqual(caseFingerprint(f.kase, f.ctx({ canon: promoted })), before);
+  assert.notStrictEqual(surfaceDigest(added), surfaceDigest(f.canon));
+});
+
+test('the shared inputs select everything: hints, models, protocol, runtime', () => {
+  const f = fixture();
+  const before = caseFingerprint(f.kase, f.ctx());
+  assert.notStrictEqual(caseFingerprint(f.kase, f.ctx({ modelsDigest: 'OTHER' })), before);
+  assert.notStrictEqual(caseFingerprint(f.kase, f.ctx({ protocolDigest: 'OTHER' })), before);
+  assert.notStrictEqual(caseFingerprint(f.kase, f.ctx({ runtimeSettings: { malloy: '0.0.404' } })), before);
+  // corrections.md carries standing hints the agent acts on (EVAL-8 keeps it
+  // inside the semantic identity for the same reason).
+  f.w('agent/corrections.md', '# corrections\n- always report margin in USD\n');
+  assert.notStrictEqual(caseFingerprint(f.kase, f.ctx()), before);
+});
+
+test('conceptDeps walks of/subtype_of and survives a cycle or an unknown URI', () => {
+  const canon = {
+    'kp:A': { of: 'kp:B' },
+    'kp:B': { subtype_of: 'kp:A' },     // cycle
+  };
+  assert.deepStrictEqual(conceptDeps(['kp:A'], canon), ['kp:A', 'kp:B']);
+  assert.deepStrictEqual(conceptDeps(['kp:Missing'], canon), ['kp:Missing']);
+});
+
+// ---- what licenses a skip ----------------------------------------------------
+const ledgerOf = (entries) => new Map(entries.map(([k, v]) => [k, v]));
+
+test('a clean, complete measurement at the same fingerprint licenses a skip', () => {
+  const f = fixture();
+  const fp = caseFingerprint(f.kase, f.ctx());
+  const key = evidenceKey({ fingerprint: fp, tier: 1, data_source: 'fixtures@abc', model_id: 'default' });
+  const [s] = selectCases([f.kase], {
+    ctx: f.ctx(), runs: 3, dataSource: 'fixtures@abc', modelId: 'default',
+    ledger: ledgerOf([[key, { passed: 3, failed: 0, errored: 0, files: ['a.jsonl'] }]]),
+  });
+  assert.strictEqual(s.skip, true);
+});
+
+test('one failing or errored run at the fingerprint is enough to re-measure', () => {
+  // "Plus last run's failures" needs no special case: a failure is never
+  // evidence, and neither is a flaky 4-of-5.
+  const f = fixture();
+  const fp = caseFingerprint(f.kase, f.ctx());
+  const key = evidenceKey({ fingerprint: fp, tier: 1, data_source: 'd', model_id: 'default' });
+  const run = (e) => selectCases([f.kase], {
+    ctx: f.ctx(), runs: 3, dataSource: 'd', modelId: 'default', ledger: ledgerOf([[key, e]]),
+  })[0];
+
+  assert.strictEqual(run({ passed: 3, failed: 1, errored: 0, files: ['a'] }).skip, false);
+  assert.strictEqual(run({ passed: 3, failed: 0, errored: 1, files: ['a'] }).skip, false);
+  assert.strictEqual(run({ passed: 2, failed: 0, errored: 0, files: ['a'] }).skip, false);
+  assert.match(run({ passed: 2, failed: 0, errored: 0, files: ['a'] }).reason, /only 2 passing/);
+});
+
+test('evidence from another lane, another dataset or another model is not evidence', () => {
+  const f = fixture();
+  const fp = caseFingerprint(f.kase, f.ctx());
+  const clean = { passed: 3, failed: 0, errored: 0, files: ['a'] };
+  const select = (ledger, over = {}) => selectCases([f.kase], {
+    ctx: f.ctx(), runs: 3, dataSource: 'fixtures@abc', modelId: 'default', ...over, ledger,
+  })[0];
+
+  // a tier-2 pass says nothing about the tier-1 lane this case declares
+  const otherLane = ledgerOf([[evidenceKey({ fingerprint: fp, tier: 2, data_source: 'fixtures@abc', model_id: 'default' }), clean]]);
+  assert.strictEqual(select(otherLane).skip, false);
+
+  const same = ledgerOf([[evidenceKey({ fingerprint: fp, tier: 1, data_source: 'fixtures@abc', model_id: 'default' }), clean]]);
+  assert.strictEqual(select(same).skip, true);
+  assert.strictEqual(select(same, { dataSource: 'fixtures@moved' }).skip, false);
+  assert.strictEqual(select(same, { modelId: 'claude-opus-5' }).skip, false);
+});
+
+test('a case with no must_use is never skipped', () => {
+  // refusal-ungoverned declares none: nothing can tell whether the definition
+  // that just changed is one it routes to. Undeclared dependencies pay full price.
+  const f = fixture();
+  const bare = { ...f.kase, must_use: [] };
+  const fp = caseFingerprint(bare, f.ctx());
+  const key = evidenceKey({ fingerprint: fp, tier: 1, data_source: 'd', model_id: 'default' });
+  const [s] = selectCases([bare], {
+    ctx: f.ctx(), runs: 3, dataSource: 'd', modelId: 'default',
+    ledger: ledgerOf([[key, { passed: 99, failed: 0, errored: 0, files: ['a'] }]]),
+  });
+  assert.strictEqual(s.skip, false);
+  assert.match(s.reason, /no must_use/);
+});
+
+test('selection off still fingerprints every case, so this sweep becomes evidence', () => {
+  const f = fixture();
+  const [s] = selectCases([f.kase], { ctx: f.ctx(), runs: 3, ledger: null });
+  assert.strictEqual(s.skip, false);
+  assert.match(s.fingerprint, /^sha256:[0-9a-f]{64}$/);
+});
+
+test('a skipped-case record can never be read back as a measurement of itself', () => {
+  // The ledger and the correlation check both key on this. If a `selection`
+  // line counted as a result row, one sweep's pass would propagate forever
+  // through sweeps that never ran the case.
+  assert.strictEqual(isResultRow({ case: 'aov', pass: true }), true);
+  assert.strictEqual(isResultRow({ kind: 'selection', case: 'aov', pass: true }), false);
+  assert.strictEqual(isResultRow({ kind: 'run_meta', cases: 6 }), false);
+  assert.strictEqual(isResultRow({ pass: true }), false);
+});
+
+// ---- concurrency (EVAL-12b) ---------------------------------------------------
+test('the first job runs alone, so one cache write serves the whole sweep', () => {
+  // Fan out cold and every worker writes its own copy of the ~11k-token prefix,
+  // which hands back most of EVAL-12c's 5x. Warm serially, then fan out.
+  const jobs = [1, 2, 3, 4, 5, 6];
+  const events = [];
+  let inFlight = 0, peak = 0;
+  return runPool(jobs, 3, async (j) => {
+    inFlight++; peak = Math.max(peak, inFlight);
+    events.push(`start:${j}`);
+    await new Promise((r) => setTimeout(r, 5));
+    events.push(`end:${j}`);
+    inFlight--;
+  }).then(() => {
+    assert.strictEqual(events.indexOf('end:1'), 1, 'job 1 must finish before anything else starts');
+    assert.strictEqual(peak, 3);
+    assert.strictEqual(events.filter((e) => e.startsWith('start:')).length, jobs.length);
+  });
+});
+
+test('runPool at concurrency 1 is exactly the serial loop', async () => {
+  const seen = [];
+  await runPool([1, 2, 3], 1, async (j) => {
+    seen.push(`start:${j}`);
+    await new Promise((r) => setTimeout(r, 1));
+    seen.push(`end:${j}`);
+  });
+  assert.deepStrictEqual(seen, ['start:1', 'end:1', 'start:2', 'end:2', 'start:3', 'end:3']);
+  await runPool([], 4, async () => { throw new Error('must not be called'); });
+});
+
+test('serialize keeps DuckDB calls from overlapping, and a failure does not wedge the queue', async () => {
+  let inFlight = 0, peak = 0;
+  const q = serialize(async (x) => {
+    inFlight++; peak = Math.max(peak, inFlight);
+    await new Promise((r) => setTimeout(r, 3));
+    inFlight--;
+    if (x === 'boom') throw new Error('compile error');
+    return x;
+  });
+  const results = await Promise.allSettled([q('a'), q('boom'), q('c')]);
+  assert.strictEqual(peak, 1);
+  assert.deepStrictEqual(results.map((r) => r.status), ['fulfilled', 'rejected', 'fulfilled']);
+  assert.strictEqual(await q('d'), 'd');
 });

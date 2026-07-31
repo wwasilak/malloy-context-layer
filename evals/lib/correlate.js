@@ -35,6 +35,11 @@
 //   measuring the difference between two products, not two lanes.
 // =============================================================================
 
+// What counts as a measurement: a result row carries no `kind`, every meta line
+// (run_meta, selection) does. Shared with select.js so there is one definition —
+// a skipped case must never be read back as evidence about itself.
+const { isResultRow } = require('./select');
+
 // A case's verdict in one lane, and the direction the pair disagrees in.
 const CLASS = {
   AGREE_PASS: 'AGREE_PASS',
@@ -49,8 +54,6 @@ const CLASS = {
 // the only outcome where tier 1 certified something and tier 2 confirms it.
 const ESTABLISHES = new Set([CLASS.AGREE_PASS]);
 const DISAGREEMENTS = new Set([CLASS.FALSE_GREEN, CLASS.FALSE_RED]);
-
-const isResultRow = (o) => !!o && o.kind !== 'run_meta' && !!o.case;
 
 // Why a run failed, as a comparison key rather than a sentence. Cross-check
 // names identify the check that fired (must_use, must_not_contain, …); `kind`

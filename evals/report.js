@@ -15,18 +15,22 @@
 const fs = require('fs');
 const path = require('path');
 
+const { isResultRow } = require('./lib/select');
+
 const RESULTS_DIR = process.env.EVAL_RESULTS_DIR || path.join('evals', 'results');
 
 function loadRun(file) {
   const rows = [];
   let meta = null;
+  let selection = null;
   for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
     const t = line.trim();
     if (!t) continue;
     let o;
     try { o = JSON.parse(t); } catch { continue; }
     if (o.kind === 'run_meta') meta = o;
-    else rows.push(o);
+    else if (o.kind === 'selection') selection = o;
+    else if (isResultRow(o)) rows.push(o);
   }
 
   // case-level verdict = quorum of its runs, the same rule run.js applied
@@ -40,8 +44,14 @@ function loadRun(file) {
   const quorum = (meta && meta.quorum) || null;
   for (const c of Object.values(byCase)) c.pass = c.passed >= (quorum || c.total);
 
-  return { file, meta, rows, cases: byCase };
+  return { file, meta, rows, cases: byCase, selection };
 }
+
+// Cases the sweep chose not to re-measure (EVAL-12b). Absent from the rows by
+// design, so without this they read as GONE — a flip that never happened, which
+// is the false signal this report exists to avoid producing.
+const skippedNames = (run) =>
+  new Set(((run.selection && run.selection.skipped) || []).map((s) => s.case));
 
 function recentFiles(n) {
   if (!fs.existsSync(RESULTS_DIR)) return [];
@@ -115,10 +125,13 @@ const pct = (p, n) => (n === 0 ? '—' : `${Math.round((p / n) * 100)}%`);
     curr.meta.semantic_identity !== prev.meta.semantic_identity;
   const dataChanged = curr.meta && prev.meta && curr.meta.data_source !== prev.meta.data_source;
 
+  const currSkipped = skippedNames(curr);
+  const prevSkipped = skippedNames(prev);
   const names = new Set([...Object.keys(curr.cases), ...Object.keys(prev.cases)]);
-  const broke = [], fixed = [], added = [], removed = [];
+  const broke = [], fixed = [], added = [], removed = [], notRun = [];
   for (const n of [...names].sort()) {
     const a = prev.cases[n], b = curr.cases[n];
+    if (currSkipped.has(n) || prevSkipped.has(n)) { notRun.push(n); continue; }
     if (!a) { added.push(n); continue; }
     if (!b) { removed.push(n); continue; }
     if (a.pass && !b.pass) broke.push(b);
@@ -135,6 +148,8 @@ const pct = (p, n) => (n === 0 ? '—' : `${Math.round((p / n) * 100)}%`);
   }
   if (added.length) console.log(`\n  NEW cases: ${added.join(', ')}`);
   if (removed.length) console.log(`  GONE cases: ${removed.join(', ')}`);
+  if (notRun.length)
+    console.log(`  NOT COMPARED (skipped by impact selection in one of the runs): ${notRun.join(', ')}`);
   if (!broke.length && !fixed.length && !added.length && !removed.length)
     console.log('  no flips');
 
