@@ -95,12 +95,26 @@ function loadCase(file) {
   // grade. With none of them set it passes unconditionally, forever, while
   // looking like coverage. A test that cannot fail is worse than no test: it
   // reports confidence it never earned.
-  const hasCrossCheck =
-    toList(d.must_use).length || toList(d.must_not_contain).length || d.expect_receipt === true;
-  if (d.expect_kind === 'analysis' && !hasCrossCheck)
+  //
+  // SIMP-5 tightened this, because "at least one cross-check" turned out to be
+  // satisfiable by a cross-check that proves nothing. `must_use` searches the
+  // whole trace INCLUDING tool results, and every approved concept is annotated
+  // in some model file (SIMP-4 made "approved but unbuilt" a hard failure), so
+  // any agent that compiles a model has the required URIs echoed into its trace
+  // for free. The first live selftest caught exactly that: an analysis case
+  // carrying only `must_use` passed against a deliberately ungoverned protocol,
+  // with no receipt and no visit to the Knowledge Plane.
+  //
+  // So an analysis case needs a check the MODEL FILES cannot satisfy on its
+  // behalf: a forbidden pattern it must not commit to, or the AGT-1 receipt.
+  const discriminating =
+    toList(d.must_not_contain).length || d.expect_receipt === true;
+  if (d.expect_kind === 'analysis' && !discriminating)
     errors.push(
-      `analysis case needs at least one cross-check (must_use, must_not_contain or expect_receipt) — ` +
-      `without one it is graded on nothing and passes unconditionally`);
+      `analysis case needs must_not_contain or expect_receipt` +
+      (toList(d.must_use).length
+        ? ` — must_use alone is not enough at tier 2: every approved concept is annotated in models/, so a compile echoes those URIs into the trace and the check passes without the agent routing to anything`
+        : ` — without one it is graded on nothing and passes unconditionally`));
 
   return {
     name,

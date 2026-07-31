@@ -39,10 +39,9 @@ merged as `838de26`.
 
 ### Picked up next, in order
 
-1. **Run `npm run eval:selftest`** — SIMP-5 rebuilt it on `--protocol` and
-   nothing has driven the new path with a real agent. ~4 tier-2 runs, $2-4. It
-   answers a question no unit test can: do the two regressions still
-   DISCRIMINATE?
+1. **Re-run `npm run eval:selftest` on the next sweep.** It ran on 2026-07-31
+   and found a case that did not test the protocol; the fix was confirmed by
+   re-grading the rows on disk, not by a fresh run. ~4 tier-2 runs, $2-4.
 2. **EVAL-5 harvesting** — now the binding constraint on the correlation check
    itself: two tier-1 cases is a thin basis for a claim about a whole lane, and
    the check gets more convincing with every case that declares tier 1 — as long
@@ -66,7 +65,7 @@ becomes the bottleneck), Phase 3b and Phase 4.
 
 ### Gates, and how to run them
 
-`npm test` (85 cases, ~2s — one of them spawns the real CLI) → `npm run build`
+`npm test` (89 cases, ~2s — one of them spawns the real CLI) → `npm run build`
 (validation + tier-0 eval checks + write-back; must leave the tree clean) → `npm run eval:check`
 (standalone form of the same tier-0 checks).
 
@@ -86,9 +85,9 @@ over. `npm test` is now wired into the build gate ahead of `build.js`.
 
 ### What live runs cost
 
-**Spent so far: ~$14.95.** ~$1.40 (29 Jul) + ~$4.30 (30 Jul — three correlation
-runs, one of them the contaminated one) + $0.53 + $8.72 (31 Jul — EVAL-12b's
-probe and its confirming sweep). A 2-case x 3-run correlation is ~$2.50 for both
+**Spent so far: ~$18.** ~$1.40 (29 Jul) + ~$4.30 (30 Jul — three correlation
+runs, one of them the contaminated one) + $0.53 + $8.72 + ~$3 (31 Jul — EVAL-12b's probe,
+its confirming sweep, and the selftest that found a hollow case). A 2-case x 3-run correlation is ~$2.50 for both
 lanes together.
 
 **The cheapest useful live measurement in this repo is the tier-1 probe: 2 cases
@@ -167,7 +166,7 @@ provenance-stamped results file; `npm run eval:report` diffs the last two runs.
 | EVAL-3 | Results as telemetry | done | One JSONL row per (case × run) in `evals/results/`, plus a `run_meta` header line. Records verdict + reason, answer excerpt, executed Malloy, extracted vs expected, tokens, cost, latency, turns, receipt presence, semantic identity, model, runtime, data source. `evals/report.js` prints per-category pass rate, pass→fail flips and flaky cases. `last_validated` stamping on passing `must_use` concepts — the writer `ARCHITECTURE.md` documented but nothing implemented. |
 | EVAL-4 | Fixture data for CI | done (no new files) | The parquets under `ParquetFiles/` are already committed, so CI checks out byte-identical data and gold values are already stable. A second sampled copy would add a sync burden and a fixture-vs-live gold discrepancy for no gain, so `fixtures` means the committed set resolved via WORKDIR (as `build.js` does), and `--live` switches to `EVAL_LIVE_WORKDIR`. |
 | EVAL-6 | Semantic identity hash | done | `sha256(digest(kp/) + digest(models/) + digest(CLAUDE.md) + malloy/duckdb/dialect)` on every result row; `eval:report` uses it to say whether a flip means the data moved or the meaning moved. Digests the WORKING TREE (evals matter most on uncommitted edits); git tree shas recorded alongside with a dirty flag. `CLAUDE.md` is included because the routing protocol can move every number without touching a concept. |
-| EVAL-5 | Seed from real usage | **ongoing** | Both known regressions run and are covered by the selftest. Harvesting from question-log/corrections continues; target ~30 cases, refusal + tier-boundary over-represented. |
+| EVAL-5 | Seed from real usage | **ongoing** | Both known regressions run and are covered by the selftest — which on 2026-07-31 proved one of them was not testing the protocol at all (see SIMP-5). Harvesting from question-log/corrections continues; target ~30 cases, refusal + tier-boundary over-represented. |
 
 ### Also shipped, not in the original spec
 
@@ -877,12 +876,57 @@ instructions, and the one legitimate blocked case (uncommitted protocol edits)
 reports as SKIPPED rather than passed. Both mutations — dropping the restore,
 and collapsing exit 2 into exit 1 — go red.
 
-**Not verified live.** `npm run eval:selftest` has not been run against the new
-path; it is ~4 tier-2 runs, $2-4. The mechanics are covered by 8 unit tests plus
-the wiring test, and the swap/restore/identity/exit-code behaviour was driven
-end-to-end through the real CLI with a stub agent — but whether the two
-regressions still DISCRIMINATE is a claim about the protocol, not the harness,
-and only a live selftest settles it.
+**RUN LIVE 2026-07-31 — evidence: `evals/results/selftest/`.** The mechanics
+worked on the first try: both phases ran, both swaps restored, `CLAUDE.md`
+byte-identical afterwards, no backup left behind, exit 1 with the right verdict.
+
+**And it immediately earned its keep by failing.**
+
+```
+OK   no-rederivation-margin:          stripped=fail, real=pass — discriminates correctly
+BAD  financial-situation-projection:  stripped=pass, real=pass — passed WITHOUT the protocol
+```
+
+`financial-situation-projection` carried `must_use` and nothing else. `must_use`
+searches the whole trace INCLUDING tool results, and every URI it names appears
+in `models/*.malloy` as a `# concept` annotation — so the ungoverned agent
+compiled three models to inspect their schemas, the compile output echoed all
+five URIs into the trace, and the check was satisfied by the model files rather
+than by anything the agent decided. It passed with `receipt_present: false`,
+having never read the Knowledge Plane.
+
+**EVAL-7 in reverse, and general rather than a quirk.** EVAL-7 narrowed
+`must_not_contain` because compile output echoed a FORBIDDEN pattern; this is
+compile output supplying a REQUIRED one. And since SIMP-4 made "approved but
+unbuilt" a hard build failure, *every* approved concept is annotated somewhere
+in `models/` — so **at tier 2, `must_use` on its own is never evidence of
+routing.** At tier 1 it still is: no tools, nothing to echo.
+
+**Two fixes, one for the case and one for the class.** The case gained
+`expect_receipt: true` — the check that made the other case fail correctly in
+the same run, and one an ungoverned prompt has no reason to satisfy. EVAL-10's
+load-time guard was tightened from "at least one cross-check" to "`must_not_contain`
+or `expect_receipt`", because "at least one" was satisfiable by a check that
+proves nothing. Four unit tests pin it.
+
+**The fix was confirmed without spending anything.** Both runs already recorded
+`receipt_present`, so re-grading the rows on disk under the amended case
+settles it: SHIPPED had `true` and still passes, STRIPPED had `false` and now
+fails. That is EVAL-12c's first lesson applied — the evidence had been paid for
+already. It is a re-grade of recorded telemetry rather than a fresh run, so the
+next live selftest is what confirms it end to end, but the inference is solid:
+the stripped prompt never mentions receipts.
+
+**One thing fixed on suspicion rather than evidence.** The control prompt
+originally carried an HTML comment explaining the rules for editing it — which
+named concepts, bindings, the routing table and receipts, i.e. exactly what the
+control exists to withhold. The agent reads the file verbatim, comments
+included. It demonstrably did NOT cause this failure (the stripped run's answer
+never mentions `kp:` at all), but a control that names the things it controls
+for is a contamination waiting to happen, so the rules moved to
+`evals/protocols/README.md` — including the standing instruction that when the
+selftest reports BAD, the fix belongs in the CASE and never in the control.
+Weakening the control to make a case fail proves nothing.
 
 ### SIMP-6 · Snapshot + diff instead of authored assertions · OPEN (the out-of-the-box one)
 
@@ -1158,6 +1202,28 @@ not the table.
 **Tier 1 is for bindings you can aggregate directly; anything whose grain or type
 must be inspected stays tier 2.** Expect this to put fewer than the hoped ~25 of 30
 cases in the cheap lane.
+
+### A cross-check the SYSTEM can satisfy on the agent's behalf checks nothing
+
+From SIMP-5's first live selftest. `must_use` searches the whole trace including
+tool results — deliberately, since reaching for a concept should count however
+it shows up. But the models carry `# concept` annotations, and the build forces
+every approved concept to have one, so **compiling a model hands the agent every
+URI the check is looking for**. An `analysis` case whose only cross-check was
+`must_use` therefore passed against a deliberately ungoverned protocol, with no
+receipt and no visit to the Knowledge Plane, and had presumably been doing so
+since the day it was written.
+
+This is the third variant of one question: *who actually produced the evidence
+this check is reading?* EVAL-7 — compile output supplying a FORBIDDEN pattern,
+failing a correct agent. Here — compile output supplying a REQUIRED one, passing
+an incorrect one. **When adding an assertion, ask what else in the repo could
+satisfy it besides the behaviour under test.**
+
+And the corollary about guards: EVAL-10 already required "at least one
+cross-check" on `analysis` cases, and that guard was GREEN on this case
+throughout. A rule that counts cross-checks cannot tell whether any of them
+discriminates.
 
 ### A mechanism that decides what NOT to measure must fail toward measuring more
 

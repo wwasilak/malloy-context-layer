@@ -380,6 +380,45 @@ test('a declared tier is honoured, and an unknown one is an error', () => {
   assert.strictEqual(loadCase('kp/agent/evals/membership-verbatim.md').tier, 2);
 });
 
+// ---- what counts as a cross-check (EVAL-10, tightened by SIMP-5) -------------
+// The first live selftest found an `analysis` case passing against a
+// deliberately ungoverned protocol. Its only cross-check was `must_use`, which
+// searches the whole trace including tool results — and every approved concept
+// is annotated in some model file, so compiling a model echoes the required
+// URIs back for free. "At least one cross-check" was satisfiable by a check
+// that proves nothing.
+const analysisCase = (frontmatter) => {
+  const dir = fs.mkdtempSync(nodePath.join(os.tmpdir(), 'kp-case-'));
+  const p = nodePath.join(dir, 'c.md');
+  fs.writeFileSync(p, `---\ntype: eval\ntitle: t\nquestion: q\nexpect_kind: analysis\n${frontmatter}\n---\nbody\n`);
+  return loadCase(p);
+};
+
+test('an analysis case carrying only must_use is rejected at load', () => {
+  const c = analysisCase('must_use: kp:TotalSales');
+  assert.strictEqual(c.errors.length, 1);
+  assert.match(c.errors[0], /must_use alone is not enough at tier 2/);
+});
+
+test('a discriminating cross-check is accepted', () => {
+  assert.deepStrictEqual(analysisCase('must_use: kp:TotalSales\nexpect_receipt: true').errors, []);
+  assert.deepStrictEqual(analysisCase('must_not_contain: ["sum(a - b)"]').errors, []);
+});
+
+test('an analysis case with no cross-check at all is still rejected', () => {
+  assert.match(analysisCase('category: x').errors[0], /passes unconditionally/);
+});
+
+test('both committed analysis cases now discriminate', () => {
+  // The regression: financial-situation-projection shipped with must_use only.
+  for (const name of ['financial-situation-projection', 'no-rederivation-margin']) {
+    const c = loadCase(`kp/agent/evals/${name}.md`);
+    assert.deepStrictEqual(c.errors, [], `${name} must load clean`);
+    assert.ok(c.must_not_contain.length || c.expect_receipt,
+      `${name} needs a cross-check the model files cannot satisfy on its behalf`);
+  }
+});
+
 // ---- the correlation check (EVAL-12) -----------------------------------------
 // This is the gate on SIMP-1's deletions, so its arithmetic is the last place a
 // wrong answer should be able to hide. Every case below is a way the check

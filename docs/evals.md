@@ -78,10 +78,21 @@ for:
 | `contains` | required substrings appear | a specific caveat or framing must be stated |
 | `analysis` | the cross-checks alone (`must_use`, `must_not_contain`, `expect_receipt`) | the question is open-ended about presentation |
 
-An `analysis` case with none of the three cross-checks set is **a load-time
-error** (EVAL-10): with no gold artifact and nothing to cross-check, it would
-pass unconditionally, forever, while looking like coverage. A test that cannot
-fail is worse than no test — it reports confidence it never earned.
+An `analysis` case must carry **`must_not_contain` or `expect_receipt`**, or it
+is a load-time error (EVAL-10, tightened by SIMP-5). With no gold artifact and
+nothing to cross-check it would pass unconditionally, forever, while looking
+like coverage — a test that cannot fail is worse than no test.
+
+**`must_use` does not satisfy that requirement**, and the reason is worth
+knowing before writing a case. `must_use` searches the whole trace *including
+what came back from tools*, and every approved concept is annotated in some
+model file (the build makes "approved but unbuilt" a hard failure), so any agent
+that compiles a model gets the required URIs echoed into its trace for free. The
+first live selftest after SIMP-5 caught exactly this: `financial-situation-
+projection` carried `must_use` and nothing else, and **passed against a
+deliberately ungoverned protocol**, emitting no receipt and never reading the
+Knowledge Plane. At tier 2, `must_use` on its own is not evidence of routing.
+(At tier 1 it is, since there are no tools and nothing to echo.)
 
 ### Cost as an assertion (AGT-3)
 
@@ -114,7 +125,7 @@ The two search different text, deliberately:
 
 | check | searched | why |
 |---|---|---|
-| `must_use` | the **whole trace** — prose, every tool call, and what came back from tools | reaching for a concept counts however it shows up; a concept can be used in a query without being named in the answer |
+| `must_use` | the **whole trace** — prose, every tool call, and what came back from tools | reaching for a concept counts however it shows up; a concept can be used in a query without being named in the answer. **The cost of that breadth:** the models carry `# concept` annotations, so a compile echoes the URIs back and `must_use` alone cannot prove the agent routed (see above) |
 | `must_not_contain` | only what the agent **committed to**: the final answer and the queries it actually executed | exploration is not commitment |
 
 Compiling an expression and then discarding it is the agent working correctly,
