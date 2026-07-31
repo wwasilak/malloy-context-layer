@@ -300,17 +300,29 @@ would quietly do nothing, which is the safe direction for it to fail in.
 ### `--concurrency <n>` — fan out, but warm first
 
 Runs are independent samples and the grader shares no state, so parallelism is
-a straight wall-clock win. Two details are not optional:
+a straight wall-clock win. Measured on the first probe (2 tier-1 cases × 3 runs
+at `--concurrency 4`): **64s against 129s of summed run latency, $0.53**.
 
-- **The first job runs alone.** Prompt caching (EVAL-12c) is content-keyed on
-  the shared prefix: the first call pays ~13k tokens of cache *creation* and
-  every call behind it reads the same prefix for ~5x less. Start N workers cold
-  and all N write their own copy of that prefix. The `Prompt cache:` line in the
-  sweep summary is how you check this is still working — a healthy sweep reads
-  most of its prefix tokens rather than writing them.
+Three details are not optional:
+
+- **The first job runs alone.** Prompt caching (EVAL-12c) is content-keyed: the
+  tier-1 prompt caches as a ~5.7k block every case shares plus a ~10k block per
+  case. The first call creates the shared one; start N workers cold and all N
+  write their own copy of it.
+- **A case's later runs wait for that case's first run.** They are
+  byte-identical prompts, so the leader's write is what makes them free. This
+  rule was missing on the first live run and it cost a duplicated 10,191-token
+  creation: `refusal-routing-decision` runs 1 and 2 started together and both
+  paid for the same block. Leaders of *different* cases still overlap — their
+  per-case blocks genuinely differ, so that creation is not waste.
 - **Malloy queries stay serialised.** Grading queries are milliseconds against
   the agent's minutes, so queueing them costs no wall clock and removes
   concurrency as a possible explanation for a verdict.
+
+The `Prompt cache:` line in the sweep summary is the sensor for the first two —
+a healthy sweep reads most of its prefix tokens rather than writing them. Read
+it on a sweep that starts **cold**; a re-run inside the cache TTL reads cheaply
+whether or not the scheduling is right.
 
 Impact selection has the cache interaction in reverse: a PR that runs 2 cases
 instead of 30 pays the cold start over a much smaller sweep, so the per-run cost

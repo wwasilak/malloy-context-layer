@@ -775,6 +775,76 @@ test('the first job runs alone, so one cache write serves the whole sweep', () =
   });
 });
 
+// The bug the first live run found. Job 0 warms the ~5.7k block every case
+// shares, but each case ALSO has a ~10k block of its own, and fanning out
+// across a case boundary started refusal-routing-decision's runs 1 and 2
+// together — both created the same 10,191 tokens. A case's followers must wait
+// for that case's leader.
+test('a case\'s later runs wait for its first run, so the per-case block is written once', async () => {
+  const jobs = [
+    { c: 'a', i: 1 }, { c: 'a', i: 2 }, { c: 'a', i: 3 },
+    { c: 'b', i: 1 }, { c: 'b', i: 2 }, { c: 'b', i: 3 },
+  ];
+  const leaderDone = new Set();
+  const violations = [];
+  const started = [];
+  await runPool(jobs, 4, async (job) => {
+    started.push(`${job.c}${job.i}`);
+    if (job.i > 1 && !leaderDone.has(job.c))
+      violations.push(`${job.c}${job.i} started before ${job.c}1 finished`);
+    await new Promise((r) => setTimeout(r, 5));
+    leaderDone.add(job.c);
+  }, { groupOf: (j) => j.c });
+
+  assert.deepStrictEqual(violations, []);
+  assert.strictEqual(started.length, 6);
+  assert.deepStrictEqual([...started].sort(), ['a1', 'a2', 'a3', 'b1', 'b2', 'b3']);
+});
+
+test('leaders of DIFFERENT cases still run concurrently — that creation is not waste', async () => {
+  // Two cases have genuinely different prompts, so serialising their first runs
+  // would cost wall clock and save nothing.
+  const jobs = [{ c: 'a', i: 1 }, { c: 'b', i: 1 }, { c: 'c', i: 1 }];
+  let inFlight = 0, peak = 0;
+  await runPool(jobs, 3, async () => {
+    inFlight++; peak = Math.max(peak, inFlight);
+    await new Promise((r) => setTimeout(r, 5));
+    inFlight--;
+  }, { groupOf: (j) => j.c });
+  assert.strictEqual(peak, 2, 'job 0 runs alone; the two remaining leaders then overlap');
+});
+
+test('a worker with nothing eligible parks and comes back, rather than retiring', async () => {
+  // Every remaining job is behind one leader, so workers find nothing to do.
+  // Retiring instead of parking still DRAINS the queue — the last worker
+  // standing picks the rest up — so "all jobs ran" is not the property to
+  // assert. What is lost is throughput: the followers would then run one at a
+  // time behind a single surviving worker, silently making a concurrent sweep
+  // serial. Assert the overlap, not the completeness.
+  const jobs = [{ c: 'a', i: 1 }, { c: 'b', i: 1 }, { c: 'b', i: 2 }, { c: 'b', i: 3 }];
+  const seen = [];
+  let inFlight = 0, peak = 0;
+  await runPool(jobs, 3, async (job) => {
+    inFlight++; peak = Math.max(peak, inFlight);
+    await new Promise((r) => setTimeout(r, job.c === 'b' && job.i === 1 ? 20 : 5));
+    inFlight--;
+    seen.push(`${job.c}${job.i}`);
+  }, { groupOf: (j) => j.c });
+  assert.deepStrictEqual(seen, ['a1', 'b1', 'b2', 'b3']);
+  assert.strictEqual(peak, 2, 'b2 and b3 must overlap once b1 has warmed the group');
+});
+
+test('without groupOf the pool keeps its old behaviour', async () => {
+  const jobs = [1, 2, 3, 4, 5];
+  let inFlight = 0, peak = 0;
+  await runPool(jobs, 3, async () => {
+    inFlight++; peak = Math.max(peak, inFlight);
+    await new Promise((r) => setTimeout(r, 3));
+    inFlight--;
+  });
+  assert.strictEqual(peak, 3);
+});
+
 test('runPool at concurrency 1 is exactly the serial loop', async () => {
   const seen = [];
   await runPool([1, 2, 3], 1, async (j) => {

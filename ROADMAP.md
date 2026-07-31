@@ -39,10 +39,11 @@ merged as `838de26`.
 
 ### Picked up next, in order
 
-1. **Run a real sweep with `--select --concurrency 4`** — EVAL-12b's saving is
-   projected, not measured, and the `Prompt cache:` line is the sensor that says
-   whether warm-then-fan-out survived contact. Do this before quoting a number
-   anywhere; see EVAL-12c's first lesson for why that matters.
+1. **Re-read the `Prompt cache:` line on the next COLD sweep.** EVAL-12b's
+   probe measured 62% read and found the fan-out bug; the fix predicts 71% and
+   26,043 tokens created. An immediate re-run proves nothing — the blocks the
+   probe wrote are still warm — so this rides the next sweep that starts cold
+   rather than being its own errand.
 2. **SIMP-5** — with the `--bare`/auth caveat recorded in its section.
 3. **EVAL-5 harvesting** — now the binding constraint on the correlation check
    itself: two tier-1 cases is a thin basis for a claim about a whole lane, and
@@ -85,8 +86,13 @@ over. `npm test` is now wired into the build gate ahead of `build.js`.
 ### What live runs cost
 
 **Spent so far: ~$1.40 (29 Jul) + ~$4.30 (30 Jul — three correlation runs, one of
-them the contaminated one).** A 2-case x 3-run correlation is ~$2.50 for both
-lanes together.
+them the contaminated one) + $0.53 (31 Jul — EVAL-12b's concurrency probe).** A
+2-case x 3-run correlation is ~$2.50 for both lanes together.
+
+**The cheapest useful live measurement in this repo is the tier-1 probe: 2 cases
+x 3 runs at $0.53, ~64s.** It exercises both lanes' scheduling, gives a real
+`Prompt cache:` reading, seeds the ledger with fingerprinted rows, and it is
+what found the EVAL-12b fan-out bug. Reach for it before a full sweep.
 
 **Per-run tier-1 cost depends on cache warmth, and quoting one number for it is
 what produced EVAL-12c's wrong premise.** A COLD run (the first of a sweep) is
@@ -572,43 +578,89 @@ rather than as a case that vanished, and the sweep summary prints NOT RE-MEASURE
 next to the pass rate — because "6/6 passed" over a selected sweep means "2
 measured, 4 assumed", and that difference is the whole risk of the feature.
 
-#### Concurrency: warm first, then fan out
+#### Concurrency: warm before fanning out, in BOTH dimensions
 
-Exactly the interaction this section warned about before it was built. `runPool`
-runs job 0 alone to completion — one cache creation for the whole sweep — and
-only then fans out to N workers. `serialize` keeps DuckDB to one query at a time:
-grading queries are milliseconds against the agent's minutes, so the wall-clock
-cost is nil and it removes concurrency as a possible explanation for a verdict,
-which is the whole reason a sweep is worth reading.
+`runPool` runs job 0 alone to completion, then fans out to N workers.
+`serialize` keeps DuckDB to one query at a time: grading queries are
+milliseconds against the agent's minutes, so the wall-clock cost is nil and it
+removes concurrency as a possible explanation for a verdict, which is the whole
+reason a sweep is worth reading.
 
-#### CI
+**That is one rule, and it shipped needing two.** See the measurement below —
+the first live run found that job 0 warms only the block every case shares, and
+a second rule was added: the other runs of a CASE wait for that case's first
+run.
 
-PRs run `--select`; pushes, schedules and manual dispatches run the full sweep,
-because something has to keep re-measuring the cases a PR was allowed to skip. A
-fresh checkout has no ledger, so a best-effort step downloads the results
-artifact of the last successful run on `main` first; if it is missing, expired or
-the download fails, the ledger is empty and `--select` degrades to a full sweep.
-`--concurrency 4` is on everywhere.
+#### MEASURED 2026-07-31 — evidence: `evals/results/2026-07-31T13-06-15Z.jsonl`
 
-#### What is NOT proven yet, and the shape of the risk
+The tier-1 probe: `--case aov-synonym,refusal-routing-decision --runs 3
+--concurrency 4 --select --no-stamp`. 6/6 passed, $0.53, 64s wall clock against
+129s of summed run latency — **2.0x**, and the serial warm-up run is 29s of
+those 64s.
 
-- **No live sweep has run with either flag.** The cost and wall-clock claims are
-  projections, not measurements — which is precisely the mistake EVAL-12c's first
-  lesson records. The `Prompt cache:` line is the sensor: if warm-then-fan-out
-  works, a concurrent sweep still reads most of its prefix tokens rather than
-  writing them. Check it on the first real run before quoting a number.
+| case | run | created | read |
+|---|---|---|---|
+| `aov-synonym` | 1 | 15,852 | 0 |
+| `aov-synonym` | 2 | **0** | 15,852 |
+| `aov-synonym` | 3 | **0** | 15,852 |
+| `refusal-routing-decision` | 1 | 10,191 | 5,686 |
+| `refusal-routing-decision` | 2 | **10,191** | 5,686 |
+| `refusal-routing-decision` | 3 | 0 | 15,877 |
+
+**The bug this found, which no unit test could have.** The tier-1 prompt caches
+in TWO blocks — a ~5.7k block every case shares, and a ~10k block per case
+(CLAUDE.md, the routing table and the question cache together, so a different
+question invalidates the whole block). Job 0 warms the shared one. It cannot
+warm the second case's own block, and the fan-out started
+`refusal-routing-decision`'s runs 1 and 2 within the same second, so **both
+created the identical 10,191 tokens**. Total creation 36,234 against a
+best-possible 26,043; 62% of prefix tokens read where perfect scheduling gives
+71%.
+
+**Warmed in the run dimension, cold in the case dimension.** That is the EVAL-9
+lesson exactly — "closed in one dimension is not closed" — arriving in a third
+place.
+
+**Fixed:** a case's followers now wait for that case's leader; leaders of
+DIFFERENT cases still overlap, because their per-case blocks genuinely differ
+and serialising them would buy nothing. Four unit tests pin the rule, and the
+one that first passed against the broken code was rewritten: dropping the park
+still DRAINS the queue (the last worker standing picks the rest up), so "every
+job ran" is not the property — the property is that the followers OVERLAP, and
+a retiring worker silently makes a concurrent sweep serial.
+
+On this schedule the fix is free in wall clock: `aov` 2/3 and `rrd` 1 fill the
+same window, and `rrd` 2/3 follow at 11s each.
+
+#### Still not proven
+
+- **The fix's effect is predicted, not measured**: creation 36,234 → 26,043,
+  read 62% → 71%. An immediate re-run cannot confirm it — the blocks the first
+  probe wrote are still warm, so everything would read cheaply for the wrong
+  reason. Re-measure on the next sweep that starts cold.
+- **Nothing has run at tier 2 with these flags**, and a tier-2 session grows its
+  own context every turn, so it has never warmed the way tier 1 does. Expect
+  concurrency to be a wall-clock win there and close to cost-neutral, and check
+  rather than assume.
+- **`--select` has never actually skipped anything on a live sweep.** It was
+  exercised end-to-end against a stub agent (fingerprints written, a forged
+  clean row licensing a skip, a concept edit revoking it) and the probe's own
+  rows are the first real evidence in the ledger — but the first genuine skip
+  happens on the next sweep at this identity.
 - **Skipping caches a STOCHASTIC verdict.** Three passing runs at a fingerprint
   is evidence, not proof; the product can still fail on the fourth. That is why
   selection is a PR-level economy and every other trigger re-measures.
-- **The writer half is pinned only by a live sweep.** Ten mutations of
-  `select.js` / `pool.js` were confirmed to go red (drop the stamp stripping, the
-  surface, the hints, the `of:` closure; ignore failing runs; skip on partial
-  evidence; skip an undeclared case; let a selection line count as a result; fan
-  out cold; drop the serialize queue). What no unit test covers is `run.js`
-  actually writing `case_fingerprint` onto each row — the EVAL-8 corollary again,
-  a helper test is not a wiring test. The mitigation is structural rather than
-  tested: `loadLedger` ignores any row without a fingerprint, so that wiring
-  breaking means the feature quietly does nothing, never that it skips wrongly.
+- **The writer half is pinned only by a live sweep.** Thirteen mutations of
+  `select.js` / `pool.js` were confirmed to go red (drop the stamp stripping,
+  the surface, the hints, the `of:` closure; ignore failing runs; skip on
+  partial evidence; skip an undeclared case; let a selection line count as a
+  result; fan out cold; drop the per-group gate; serialise every leader; retire
+  instead of parking; drop the serialize queue). What no unit test covers is
+  `run.js` actually writing `case_fingerprint` onto each row — the EVAL-8
+  corollary again, a helper test is not a wiring test. The mitigation is
+  structural rather than tested: `loadLedger` ignores any row without a
+  fingerprint, so that wiring breaking means the feature quietly does nothing,
+  never that it skips wrongly. (The probe's rows confirm it is written.)
 
 ### EVAL-13 · Minor harness fixes · 2 of 3 DONE
 
@@ -1039,3 +1091,14 @@ EVAL-9 was fixed in the row dimension, verified, and shipped — and the identic
 hole survived in the column dimension for another day, live on both scalar-gold
 cases. When a fix is about a *class* of laxity, enumerate the dimensions it can
 appear in before calling it done.
+
+**Third instance, EVAL-12b.** The warm-then-fan-out rule was written, reviewed
+and unit-tested against the *run* dimension: job 0 runs alone so the sweep pays
+one cache creation. It shipped blind to the *case* dimension, where the prompt
+has a second cached block, and the first live run started two runs of the same
+case together and paid for that block twice. Both times the fix was correct as
+far as it went, and "as far as it went" was the bug.
+
+**And the corollary about how it was caught:** only a live run could catch it.
+Every unit test agreed with the code, because the code did exactly what the
+tests and the author both believed the rule was.

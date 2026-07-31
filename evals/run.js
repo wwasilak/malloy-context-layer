@@ -272,8 +272,8 @@ async function askWithRetry(fn, { quiet }) {
   const cache = { read: 0, created: 0, runs: 0, warm: 0 };
 
   // One job per (case x run). Ordered case-major, run-minor — the same order a
-  // serial sweep used, which matters because job 0 is the one that warms the
-  // prompt cache for every job behind it (EVAL-12b).
+  // serial sweep used, and the order `runPool` needs: the first job of a case
+  // is that case's cache leader, and the runs behind it wait for it (EVAL-12b).
   const jobs = [];
   for (const c of toRun) for (let i = 1; i <= args.runs; i++) jobs.push({ c, i });
 
@@ -409,7 +409,9 @@ async function askWithRetry(fn, { quiet }) {
     });
     console.log(`${casePass ? 'PASS' : 'FAIL'}  ${c.name} (${passed}/${args.runs}` +
       `${t.errored ? `, ${t.errored} never answered` : ''}) [tier ${tier}]`);
-  });
+    // The cache group is the CASE: its runs are byte-identical prompts, so the
+    // first one to complete is what makes the rest free (EVAL-12b).
+  }, { groupOf: (job) => job.c.name });
 
   // Wait for the flush. process.exit() below would otherwise discard whatever
   // is still buffered, and a truncated results file is worse than none: the
