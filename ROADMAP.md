@@ -39,18 +39,14 @@ merged as `838de26`.
 
 ### Picked up next, in order
 
-1. **Re-read the `Prompt cache:` line on the next COLD sweep.** EVAL-12b's
-   probe measured 62% read and found the fan-out bug; the fix predicts 71% and
-   26,043 tokens created. An immediate re-run proves nothing — the blocks the
-   probe wrote are still warm — so this rides the next sweep that starts cold
-   rather than being its own errand.
-2. **SIMP-5** — with the `--bare`/auth caveat recorded in its section.
-3. **EVAL-5 harvesting** — now the binding constraint on the correlation check
+1. **SIMP-5** — with the `--bare`/auth caveat recorded in its section.
+2. **EVAL-5 harvesting** — now the binding constraint on the correlation check
    itself: two tier-1 cases is a thin basis for a claim about a whole lane, and
    the check gets more convincing with every case that declares tier 1 — as long
    as each new one re-runs it. It is also what makes impact selection worth
-   anything: selecting 2 of 6 cases saves little, selecting 2 of 30 is the point.
-4. **The ROADMAP is current** — no pending write-up.
+   anything: selecting 2 of 6 cases saved $0.15 on 2026-07-31, selecting 20 of
+   30 is the point.
+3. **The ROADMAP is current** — no pending write-up.
 
 **Then:** pick a server — INT-1/INT-2 first (both runtime-independent), then
 INT-3a or INT-3b with INT-6.
@@ -85,21 +81,34 @@ over. `npm test` is now wired into the build gate ahead of `build.js`.
 
 ### What live runs cost
 
-**Spent so far: ~$1.40 (29 Jul) + ~$4.30 (30 Jul — three correlation runs, one of
-them the contaminated one) + $0.53 (31 Jul — EVAL-12b's concurrency probe).** A
-2-case x 3-run correlation is ~$2.50 for both lanes together.
+**Spent so far: ~$14.95.** ~$1.40 (29 Jul) + ~$4.30 (30 Jul — three correlation
+runs, one of them the contaminated one) + $0.53 + $8.72 (31 Jul — EVAL-12b's
+probe and its confirming sweep). A 2-case x 3-run correlation is ~$2.50 for both
+lanes together.
 
 **The cheapest useful live measurement in this repo is the tier-1 probe: 2 cases
-x 3 runs at $0.53, ~64s.** It exercises both lanes' scheduling, gives a real
-`Prompt cache:` reading, seeds the ledger with fingerprinted rows, and it is
-what found the EVAL-12b fan-out bug. Reach for it before a full sweep.
+x 3 runs at $0.53, ~64s.** It exercises the scheduling, gives a readable
+`Prompt cache:` figure, seeds the ledger with fingerprinted rows, and it is what
+found the EVAL-12b fan-out bug. Reach for it before a full sweep.
+
+**A full 5-case x 3-run sweep is $8.72 / 10.2 min at `--concurrency 4`**
+(2026-07-31), against $9.66 / 24.7 min serial for the comparable 2026-07-28
+sweep. Concurrency buys 2.4x wall clock and is roughly cost-neutral.
 
 **Per-run tier-1 cost depends on cache warmth, and quoting one number for it is
 what produced EVAL-12c's wrong premise.** A COLD run (the first of a sweep) is
 $0.12-$0.16; a WARM one is $0.025-$0.033. Sweeps are mostly warm runs, so project
-a sweep at the warm price plus one cold start — not at $0.16 x N. Tier-2 runs are
-$0.18-$0.43 and do not warm the same way, since a growing session always has new
-context to write.
+a sweep at the warm price plus one cold start — not at $0.16 x N.
+
+**Tier-2 runs are $0.41-$1.28** (measured 2026-07-31 across 13 runs; the earlier
+$0.18-$0.43 came from a narrower sample and understated it —
+`financial-situation-projection` alone is $0.91-$1.28 over 22-27 turns and is now
+the most expensive case in the suite, ahead of `refusal-ungoverned`). Tier 2 does
+not warm the way tier 1 does, since a growing session always has new context to
+write: **every tier-2 run in that sweep wrote cache; only the tier-1 runs did
+not.** Read the `Prompt cache:` headline with that in mind — on a tier-2-heavy
+sweep it reports intra-session reads and says almost nothing about cross-run
+warming.
 
 ### Where the phases stand
 
@@ -632,24 +641,54 @@ a retiring worker silently makes a concurrent sweep serial.
 On this schedule the fix is free in wall clock: `aov` 2/3 and `rrd` 1 fill the
 same window, and `rrd` 2/3 follow at 11s each.
 
+#### CONFIRMED 2026-07-31 — evidence: `evals/results/2026-07-31T13-39-16Z.jsonl`
+
+Both lanes, 32 minutes after the probe (so past the cache TTL — run 1 creating
+at all is what proves the blocks had expired). `--runs 3 --concurrency 4
+--select --no-stamp`: 5 cases selected, 1 skipped, **5/5 passed, $8.72, 10.2 min
+wall clock against 24.9 min of summed run latency — 2.4x**.
+
+**The fix is confirmed by a direct A/B on the same case.**
+
+| `refusal-routing-decision`, tier 1 | run 1 | run 2 | run 3 |
+|---|---|---|---|
+| before the fix (13:06 probe) | 10,191 created | **10,191 created** | 0 |
+| after the fix (13:39 sweep) | 13,173 created | **0** | **0** |
+
+Tier-1 read share 72%, and no duplicate creation anywhere. The gate is visible
+in the timestamps too: all 10 followers across the 5 cases started at or after
+their leader finished, zero violations, while leaders of different cases still
+overlapped (`membership-verbatim` run 1 and `no-rederivation-margin` run 1 both
+started at +216s).
+
+**Tier 2 behaves as EVAL-12c predicted and the sweep summary must not be read
+naively.** The headline said `Prompt cache: 92% read` — but 13 of 15 runs were
+tier-2 sessions, whose reads are dominated by re-reading their own growing
+context every turn, and every one of them wrote cache. **The cross-run warming
+signal is only readable in the tier-1 rows.** A 92% headline over a tier-2-heavy
+sweep says almost nothing about the scheduling this item exists to get right.
+
+**Concurrency is a wall-clock win and roughly cost-neutral**, as expected: $8.72
+here against $9.66 for the original serial sweep at a near-identical 24.7 min of
+serial-equivalent work.
+
+**And a number the design decision now has a price tag on.** `--select` skipped
+`aov-synonym` and saved ~$0.15. Meanwhile the "no `must_use` → never skipped"
+rule forbids skipping `refusal-ungoverned` at **$2.04 per sweep** — an order of
+magnitude more than selection saved. The rule is still right (its dependencies
+genuinely are undeclared, and guessing them is how a false skip happens), but
+the cost of that correctness is now measured rather than asserted. If it ever
+needs closing, the move is to let a case DECLARE the dependency it asserts the
+absence of, not to relax the rule.
+
 #### Still not proven
 
-- **The fix's effect is predicted, not measured**: creation 36,234 → 26,043,
-  read 62% → 71%. An immediate re-run cannot confirm it — the blocks the first
-  probe wrote are still warm, so everything would read cheaply for the wrong
-  reason. Re-measure on the next sweep that starts cold.
-- **Nothing has run at tier 2 with these flags**, and a tier-2 session grows its
-  own context every turn, so it has never warmed the way tier 1 does. Expect
-  concurrency to be a wall-clock win there and close to cost-neutral, and check
-  rather than assume.
-- **`--select` has never actually skipped anything on a live sweep.** It was
-  exercised end-to-end against a stub agent (fingerprints written, a forged
-  clean row licensing a skip, a concept edit revoking it) and the probe's own
-  rows are the first real evidence in the ledger — but the first genuine skip
-  happens on the next sweep at this identity.
 - **Skipping caches a STOCHASTIC verdict.** Three passing runs at a fingerprint
   is evidence, not proof; the product can still fail on the fourth. That is why
   selection is a PR-level economy and every other trigger re-measures.
+- **The CI wiring has never run.** The artifact download and the
+  PR-vs-push branch in `eval.yml` are untested YAML; both fail toward a full
+  sweep, which is why they were shipped that way.
 - **The writer half is pinned only by a live sweep.** Thirteen mutations of
   `select.js` / `pool.js` were confirmed to go red (drop the stamp stripping,
   the surface, the hints, the `of:` closure; ignore failing runs; skip on
@@ -660,7 +699,8 @@ same window, and `rrd` 2/3 follow at 11s each.
   corollary again, a helper test is not a wiring test. The mitigation is
   structural rather than tested: `loadLedger` ignores any row without a
   fingerprint, so that wiring breaking means the feature quietly does nothing,
-  never that it skips wrongly. (The probe's rows confirm it is written.)
+  never that it skips wrongly. Both live runs confirm it is written, and the
+  second one consumed the first one's rows to make a real skip.
 
 ### EVAL-13 · Minor harness fixes · 2 of 3 DONE
 

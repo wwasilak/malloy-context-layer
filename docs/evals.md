@@ -300,8 +300,10 @@ would quietly do nothing, which is the safe direction for it to fail in.
 ### `--concurrency <n>` — fan out, but warm first
 
 Runs are independent samples and the grader shares no state, so parallelism is
-a straight wall-clock win. Measured on the first probe (2 tier-1 cases × 3 runs
-at `--concurrency 4`): **64s against 129s of summed run latency, $0.53**.
+a straight wall-clock win. Measured 2026-07-31 on a 5-case × 3-run sweep at
+`--concurrency 4`: **10.2 min against 24.9 min of summed run latency (2.4x),
+$8.72** — against $9.66 / 24.7 min for the comparable serial sweep, so it is
+roughly cost-neutral.
 
 Three details are not optional:
 
@@ -319,10 +321,13 @@ Three details are not optional:
   the agent's minutes, so queueing them costs no wall clock and removes
   concurrency as a possible explanation for a verdict.
 
-The `Prompt cache:` line in the sweep summary is the sensor for the first two —
-a healthy sweep reads most of its prefix tokens rather than writing them. Read
-it on a sweep that starts **cold**; a re-run inside the cache TTL reads cheaply
-whether or not the scheduling is right.
+The `Prompt cache:` line in the sweep summary is the sensor for the first two,
+but read it carefully — **it is only meaningful over tier-1 rows**. A tier-2
+session re-reads its own growing context on every turn and always has something
+new to write, so a tier-2-heavy sweep posts a flattering headline (92% on
+2026-07-31, with every tier-2 run writing cache) that says nothing about
+cross-run warming. Read it on a sweep that starts **cold**, too: a re-run inside
+the cache TTL reads cheaply whether or not the scheduling is right.
 
 Impact selection has the cache interaction in reverse: a PR that runs 2 cases
 instead of 30 pays the cold start over a much smaller sweep, so the per-run cost

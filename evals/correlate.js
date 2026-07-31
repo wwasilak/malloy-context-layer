@@ -43,7 +43,7 @@ const RUNNER = path.join(__dirname, 'run.js');
 
 // Observed on real runs (see ROADMAP EVAL-12c) — printed as a warning, never
 // used in a calculation.
-const OBSERVED = { tier1: '$0.12-0.17', tier2: '$0.20-0.90' };
+const OBSERVED = { tier1: '$0.03-0.17', tier2: '$0.41-1.28' };
 
 function parseArgs(argv) {
   const a = { case: null, all: false, runs: 3, quorum: null, model: null, timeout: null, maxTurns: null, concurrency: null, from: null, quiet: false };
