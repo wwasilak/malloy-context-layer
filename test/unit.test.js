@@ -755,6 +755,124 @@ test('a skipped-case record can never be read back as a measurement of itself', 
   assert.strictEqual(isResultRow({ pass: true }), false);
 });
 
+// ---- the protocol swap (SIMP-5) ----------------------------------------------
+// This is the only code in the harness that rewrites a tracked file, so the
+// failure everything here guards against is leaving someone's CLAUDE.md
+// replaced by a scratch prompt.
+const { swapIn, guard, assertActive, sha256: protoSha } = require('../evals/lib/protocol');
+
+function protoFixture() {
+  const dir = fs.mkdtempSync(nodePath.join(os.tmpdir(), 'kp-protocol-'));
+  const real = nodePath.join(dir, 'CLAUDE.md');
+  const alt = nodePath.join(dir, 'stripped.md');
+  const backup = nodePath.join(dir, 'CLAUDE.md.backup');
+  fs.writeFileSync(real, '# the governed protocol\n');
+  fs.writeFileSync(alt, '# a plain analyst prompt\n');
+  return { dir, real, alt, backup, opts: { protocolFile: real, backupFile: backup } };
+}
+
+test('swapIn puts the alternate protocol where the agent will discover it', () => {
+  const f = protoFixture();
+  const restore = swapIn(f.alt, f.opts);
+  assert.strictEqual(fs.readFileSync(f.real, 'utf8'), '# a plain analyst prompt\n');
+  assert.ok(fs.existsSync(f.backup), 'the original must be kept somewhere');
+  restore();
+  assert.strictEqual(fs.readFileSync(f.real, 'utf8'), '# the governed protocol\n');
+  assert.ok(!fs.existsSync(f.backup), 'the backup must not survive a clean restore');
+});
+
+test('restore is idempotent — a finally and a signal handler both call it', () => {
+  const f = protoFixture();
+  const restore = swapIn(f.alt, f.opts);
+  assert.strictEqual(restore(), true);
+  assert.strictEqual(restore(), false, 'the second call must be a no-op, not a re-copy');
+  // and it must not have clobbered the restored file
+  assert.strictEqual(fs.readFileSync(f.real, 'utf8'), '# the governed protocol\n');
+});
+
+test('a leftover backup refuses the run rather than overwriting it', () => {
+  // That backup is someone's real CLAUDE.md from a crashed run. Writing a new
+  // one over it destroys the only copy.
+  const f = protoFixture();
+  fs.writeFileSync(f.backup, '# a previous run did not clean up\n');
+  assert.throws(() => swapIn(f.alt, f.opts), /did not clean up/);
+  assert.strictEqual(fs.readFileSync(f.backup, 'utf8'), '# a previous run did not clean up\n');
+  assert.strictEqual(fs.readFileSync(f.real, 'utf8'), '# the governed protocol\n', 'nothing may be swapped after a refusal');
+});
+
+test('a missing protocol file is refused before anything is touched', () => {
+  const f = protoFixture();
+  assert.throws(() => swapIn(nodePath.join(f.dir, 'nope.md'), f.opts), /not found/);
+  assert.ok(!fs.existsSync(f.backup));
+  assert.strictEqual(fs.readFileSync(f.real, 'utf8'), '# the governed protocol\n');
+});
+
+test('guard passes on a clean tree it cannot inspect', () => {
+  // Outside a git repo there is no dirty check to make; the backup is the
+  // remaining protection and guard must not refuse on that account.
+  const f = protoFixture();
+  assert.doesNotThrow(() => guard(f.opts));
+});
+
+test('assertActive catches an identity computed BEFORE the swap', () => {
+  // The ordering bug this exists for: results stamped with the shipped
+  // protocol's identity while a scratch protocol was actually in force. Those
+  // rows would sit in the ledger looking like evidence about the real product,
+  // and --select would be entitled to skip a real case on them.
+  const f = protoFixture();
+  const shipped = protoSha(fs.readFileSync(f.real));
+  assert.throws(() => assertActive(f.alt, shipped, f.opts), /did not take effect/);
+  assert.strictEqual(assertActive(f.alt, protoSha(fs.readFileSync(f.alt)), f.opts), true);
+});
+
+// The wiring test, not a helper test — and the distinction matters more here
+// than anywhere: every unit above passes against a run.js that swaps the file
+// and then forgets to put it back. This drives the real CLI down its crash
+// path (an unknown case name throws AFTER the swap and before any Malloy
+// compile, so it costs ~0.3s and no agent) and checks the tree afterwards.
+//
+// Safe to fail: swapIn refuses to start unless CLAUDE.md is committed, so
+// `git checkout CLAUDE.md` always recovers. The test self-skips when it cannot
+// run safely rather than reporting a pass it did not earn.
+test('run.js restores CLAUDE.md when a --protocol run crashes', (t) => {
+  const { spawnSync } = require('node:child_process');
+
+  // A leftover backup makes the guard refuse, which would send this test down a
+  // "cannot run" path. It must NOT be treated as a skip: the file is somebody's
+  // real CLAUDE.md stranded by a crashed run, and staying quiet about it is how
+  // this test silently stopped testing anything. Fail loudly and say what to do.
+  assert.ok(!fs.existsSync('CLAUDE.md.protocol-backup'),
+    'CLAUDE.md.protocol-backup exists — a --protocol run was interrupted. Restore it over CLAUDE.md and delete it before running the suite.');
+
+  const before = fs.readFileSync('CLAUDE.md');
+  const alt = nodePath.join(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'kp-wire-')), 'alt.md');
+  fs.writeFileSync(alt, '# a scratch protocol\n');
+
+  const r = spawnSync(process.execPath, [
+    nodePath.join('evals', 'run.js'), '--protocol', alt, '--case', 'no-such-case-exists',
+  ], { encoding: 'utf8' });
+  const output = (r.stdout || '') + (r.stderr || '');
+
+  // Uncommitted protocol edits are the one legitimate reason this cannot run.
+  // Report it as SKIPPED, never as passed — the whole lesson of this branch.
+  if (/uncommitted changes/.test(output)) {
+    assert.deepStrictEqual(fs.readFileSync('CLAUDE.md'), before, 'a refused swap must touch nothing');
+    return t.skip('CLAUDE.md has uncommitted changes, so the swap refused to run');
+  }
+
+  assert.strictEqual(r.status, 2, 'a run that produced no verdict must not exit 1 — the selftest reads that as a case failing');
+  assert.deepStrictEqual(fs.readFileSync('CLAUDE.md'), before, 'CLAUDE.md must come back byte-identical');
+  assert.ok(!fs.existsSync('CLAUDE.md.protocol-backup'), 'no backup may be left behind');
+});
+
+test('a --protocol run gets a different fingerprint, so it can never license a skip', () => {
+  // The structural reason a stripped-protocol sweep cannot poison the ledger.
+  const f = fixture();
+  const shipped = caseFingerprint(f.kase, f.ctx());
+  const stripped = caseFingerprint(f.kase, f.ctx({ protocolDigest: 'STRIPPED' }));
+  assert.notStrictEqual(stripped, shipped);
+});
+
 // ---- concurrency (EVAL-12b) ---------------------------------------------------
 test('the first job runs alone, so one cache write serves the whole sweep', () => {
   // Fan out cold and every worker writes its own copy of the ~11k-token prefix,

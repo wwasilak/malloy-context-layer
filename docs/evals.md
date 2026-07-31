@@ -29,6 +29,7 @@ npm run eval:gold                 # (re)compute expect_value from each gold_quer
 npm run eval:check                # verify cases parse + gold has not drifted (no agent)
 npm run eval:report               # pass rate by category + flips vs the previous run
 npm run eval:selftest             # does the harness detect what it is for?
+npm run eval -- --protocol evals/protocols/stripped-analyst.md --case <name>
 ```
 
 Requires the `claude` CLI on PATH (override with `EVAL_AGENT_BIN`) and the
@@ -538,13 +539,56 @@ first word.
 A suite that passes everything is indistinguishable from a suite that grades
 nothing. The selftest takes the two regressions seen in real sessions
 (`no-rederivation-margin`, `financial-situation-projection`), runs them against
-a deliberately stripped `CLAUDE.md` — a competent but ungoverned analyst prompt,
+a deliberately stripped protocol — a competent but ungoverned analyst prompt,
 not a strawman — and requires them to **fail**; then runs them against the real
 protocol and requires them to **pass**. Only a harness that does both is worth
 gating a PR on.
 
-`CLAUDE.md` is backed up and restored in a `finally` block and on SIGINT, and
-the run refuses to start if `CLAUDE.md` has uncommitted changes.
+The control prompt is a reviewable file, `evals/protocols/stripped-analyst.md`,
+with the rule for editing it written inside: it may say anything a sensible
+analyst prompt would say about querying Malloy, and it may not mention concepts,
+bindings, the routing table, governed metrics, membership rules, tiers or
+receipts. Everything the selftest exists to detect must be absent there and
+present in `CLAUDE.md`.
+
+### `run.js --protocol <path>` (SIMP-5)
+
+The mechanics live in the runner, not in the selftest. `--protocol` swaps the
+file in for the duration of the run and restores it afterwards — in a `finally`,
+on SIGINT/SIGTERM/SIGHUP, and on any crash.
+
+**Why a swap rather than injection.** Both lanes *discover* `CLAUDE.md` from the
+working directory; tier 1 does it exactly as tier 2 does, because "tier 1
+differs from tier 2 in tools and turns and nothing else" is what makes the
+correlation check a comparison rather than two unrelated measurements. Injecting
+into one lane and discovering in the other would break that, and injection also
+means `claude --bare`, which forces API-key-only auth and breaks a local run on
+OAuth.
+
+Three properties it has to hold, each because of a specific way it could lie:
+
+- **The swap happens before the identity is computed.** `CLAUDE.md` is inside
+  `semantic_identity` and inside every `case_fingerprint`, so hashing before the
+  swap would stamp a stripped-protocol run with the shipped protocol's identity
+  — and `--select` would then be entitled to skip a real case on the strength of
+  a run that deliberately used the wrong rules. The runner *asserts* the
+  identity it computed matches the protocol file, so a future reordering fails
+  loudly instead.
+- **Results land in `evals/results/protocol/`** and never stamp `last_validated`
+  — same reasoning as the correlation check. A run under a scratch protocol
+  sitting beside normal sweeps would be diffed against one by `eval:report`, and
+  every case would read as a flip.
+- **Exit codes distinguish a verdict from no verdict**: `0` all passed, `1` a
+  case failed, `2` nothing ran. That third code is load-bearing for the
+  selftest, whose stripped phase *expects* failure — a run that never happened
+  (dirty `CLAUDE.md`, a leftover backup, a missing protocol file) arriving as
+  the same code would deliver exactly the answer that phase hopes for, and the
+  selftest would certify a harness it never exercised.
+
+The run refuses to start if `CLAUDE.md` has uncommitted changes, or if a
+`CLAUDE.md.protocol-backup` is left over from an interrupted run — that file is
+somebody's real protocol, and writing a new backup over it destroys the only
+copy.
 
 ## CI
 

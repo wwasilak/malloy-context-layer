@@ -31,6 +31,7 @@ const { semanticIdentity } = require('./lib/identity');
 const { setFrontmatterField } = require('./lib/stamp');
 const { planeContext, selectCases, loadLedger } = require('./lib/select');
 const { runPool, serialize } = require('./lib/pool');
+const protocol = require('./lib/protocol');
 const okf = require('../okf-lib');
 
 const KP_DIR = process.env.KP_DIR || 'kp';
@@ -43,6 +44,7 @@ function parseArgs(argv) {
     timeout: 300000, stamp: !process.env.CI, maxTurns: 30, rowLimit: 200, quiet: false,
     tier: null,   // null = each case runs in the lane it declares
     concurrency: 1, select: false,   // both opt-in (EVAL-12b)
+    protocol: null,  // SIMP-5: run against a different CLAUDE.md
   };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
@@ -57,6 +59,7 @@ function parseArgs(argv) {
     else if (k === '--tier') a.tier = parseInt(next(), 10);
     else if (k === '--concurrency') a.concurrency = parseInt(next(), 10);
     else if (k === '--select') a.select = true;
+    else if (k === '--protocol') a.protocol = next();
     else if (k === '--stamp') a.stamp = true;
     else if (k === '--no-stamp') a.stamp = false;
     else if (k === '--quiet') a.quiet = true;
@@ -76,6 +79,11 @@ function parseArgs(argv) {
   // pinned, so it must never write that claim back into kp/ — not even when
   // --stamp was passed explicitly.
   if (a.live && a.stamp) { a.stamp = false; a.stampSuppressed = true; }
+  // SIMP-5: same reasoning, different cause. A --protocol run measures the
+  // HARNESS — whether the shipped rules change behaviour — using rules that are
+  // deliberately not the shipped ones. Letting it stamp would put a protocol
+  // nobody governs on a governed definition.
+  if (a.protocol && a.stamp) { a.stamp = false; a.stampSuppressed = true; }
   // default: unanimity. A case that only passes sometimes is not passing.
   if (a.quorum == null) a.quorum = a.runs;
   if (a.quorum > a.runs) throw new Error('--quorum cannot exceed --runs');
@@ -102,10 +110,25 @@ eval runner (EVAL-1)
                      (EVAL-12b). Never valid with --live.
   --concurrency <n>  agent calls in flight (default 1). The first run is always
                      serial, to warm the shared prompt cache before fanning out.
-  --no-stamp         do not write last_validated (implied by CI and by --live)
+  --protocol <path>  run against this file instead of the shipped CLAUDE.md.
+                     It is swapped in for the duration and restored afterwards,
+                     so both lanes discover it exactly as they discover the real
+                     one. Results land in a subdirectory and never stamp.
+  --no-stamp         do not write last_validated (implied by CI, --live,
+                     --protocol)
   --quiet            summary only
 `);
 }
+
+// ---- exit codes --------------------------------------------------------------
+// 1 and 2 have to be different, and the selftest is why. Its stripped phase
+// EXPECTS the cases to fail, so "the harness never ran" and "the cases failed"
+// arriving as the same code would let a run that never happened be read as the
+// evidence it was looking for — a false green reached without running an agent.
+// 0 = every case passed. 1 = a case failed (a verdict). 2 = no verdict exists.
+const EXIT_OK = 0;
+const EXIT_CASES_FAILED = 1;
+const EXIT_ERROR = 2;
 
 // ---- helpers ----------------------------------------------------------------
 const pct = (n, d) => (d === 0 ? '—' : `${Math.round((n / d) * 100)}%`);
@@ -138,17 +161,34 @@ async function askWithRetry(fn, { quiet }) {
 }
 
 // ---- main -------------------------------------------------------------------
+// `restoreProtocol` is module-scoped so the signal handlers below can reach it.
+// A --protocol run rewrites a tracked file, and the one thing that must not
+// happen is Ctrl-C leaving someone's CLAUDE.md replaced by a scratch prompt.
+let restoreProtocol = null;
+const restoreNow = () => { if (restoreProtocol) restoreProtocol(); };
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'])
+  process.on(sig, () => { restoreNow(); process.exit(130); });
+process.on('uncaughtException', (e) => { restoreNow(); console.error('FATAL:', e.stack || e); process.exit(2); });
+
 (async () => {
   const args = parseArgs(process.argv.slice(2));
+
+  // SIMP-5: swap FIRST. CLAUDE.md is inside semantic_identity (EVAL-6) and
+  // inside every case_fingerprint (EVAL-12b), so anything computed before this
+  // point would label a stripped-protocol run with the shipped protocol's
+  // identity — and `--select` would then be entitled to skip a real case on the
+  // strength of a run that used the wrong rules. `assertActive` below turns a
+  // future reordering into a loud failure instead of that.
+  if (args.protocol) restoreProtocol = protocol.swapIn(args.protocol);
 
   const cases = loadCases(undefined, args.case);
   const broken = cases.filter((c) => c.errors && c.errors.length);
   if (broken.length) {
     console.error('\nEVAL FAILED — invalid case files:');
     for (const c of broken) c.errors.forEach((e) => console.error(`  ${c._path}: ${e}`));
-    process.exit(1);
+    process.exit(EXIT_ERROR);
   }
-  if (!cases.length) { console.error('no eval cases found'); process.exit(1); }
+  if (!cases.length) { console.error('no eval cases found'); process.exit(EXIT_ERROR); }
 
   // data + models
   const mode = args.live ? 'live' : 'fixtures';
@@ -162,6 +202,10 @@ async function askWithRetry(fn, { quiet }) {
 
   // provenance (EVAL-6)
   const ident = semanticIdentity({ kpDir: KP_DIR, modelsDir: mal.MODELS_DIR, runtimeSettings: versions });
+  // The swap above is only correct if the identity hashed the swapped file.
+  // Assert it rather than trust the ordering — a mechanism reporting one thing
+  // while another mechanism does something else is this repo's recurring bug.
+  if (args.protocol) protocol.assertActive(args.protocol, ident.components.protocol);
 
   // data_source: fixtures identified by content, live by how far the data goes
   let dataSource = `${mode}@unknown`;
@@ -207,6 +251,7 @@ async function askWithRetry(fn, { quiet }) {
   console.log(`Agent: ${AGENT_BIN}${args.model ? ' (' + args.model + ')' : ''} | data: ${dataSource}` +
     (args.concurrency > 1 ? ` | concurrency ${args.concurrency}` : ''));
   console.log(`Semantic identity: ${ident.semantic_identity.slice(0, 23)}…${ident.components.dirty ? ' (working tree dirty)' : ''}`);
+  if (args.protocol) console.log(`Protocol: ${args.protocol} swapped in for CLAUDE.md — this measures the HARNESS, not the product`);
   if (args.select) {
     console.log(`Selection: ${toRun.length}/${cases.length} selected, ${skipped.length} skipped as unchanged`);
     for (const s of selection.filter((x) => !x.skip))
@@ -214,8 +259,13 @@ async function askWithRetry(fn, { quiet }) {
   }
   console.log('');
 
-  fs.mkdirSync(RESULTS_DIR, { recursive: true });
-  const outFile = path.join(RESULTS_DIR, `${stamp()}.jsonl`);
+  // A --protocol sweep goes in a subdirectory, for the same reason the
+  // correlation check does (EVAL-12d): dropped beside normal sweeps, it would
+  // be diffed against one by `eval:report` and every case would read as a flip
+  // — and the flip would be entirely the point of the run.
+  const resultsDir = args.protocol ? path.join(RESULTS_DIR, 'protocol') : RESULTS_DIR;
+  fs.mkdirSync(resultsDir, { recursive: true });
+  const outFile = path.join(resultsDir, `${stamp()}.jsonl`);
   const out = fs.createWriteStream(outFile);
   const write = (o) => out.write(JSON.stringify(o) + '\n');
 
@@ -224,6 +274,7 @@ async function askWithRetry(fn, { quiet }) {
     quorum: args.quorum, model_id: args.model || 'default', agent: AGENT_BIN,
     tier_override: args.tier ?? null,
     select: args.select, concurrency: args.concurrency,
+    protocol: args.protocol || null,
     data_source: dataSource, semantic_identity: ident.semantic_identity,
     identity_components: ident.components, runtime: versions,
   });
@@ -422,6 +473,11 @@ async function askWithRetry(fn, { quiet }) {
     out.end();
   });
 
+  // Every agent call is done, so the real protocol goes back before anything
+  // else touches the tree. Idempotent, and the signal handlers hold the same
+  // function — whichever gets there first wins.
+  if (restoreProtocol) restoreNow();
+
   // ---- last_validated stamping (EVAL-3) ------------------------------------
   // ARCHITECTURE.md documents this field as eval-runner-stamped; this is the
   // writer. A concept is only stamped when a case that must_use it passed on
@@ -470,12 +526,22 @@ async function askWithRetry(fn, { quiet }) {
       `, ${cache.warm}/${cache.runs} run(s) wrote nothing`);
   }
   if (args.stamp) console.log(`last_validated stamped on ${stamped} concept file(s)`);
-  else if (args.stampSuppressed) console.log('last_validated NOT stamped — --live data is not the pinned fixtures');
+  else if (args.stampSuppressed)
+    console.log(args.protocol
+      ? `last_validated NOT stamped — ${args.protocol} is not the governed protocol`
+      : 'last_validated NOT stamped — --live data is not the pinned fixtures');
+  if (args.protocol) console.log(`Protocol restored: ${protocol.PROTOCOL_FILE}`);
   console.log(`Results: ${outFile}`);
 
   const unaudited = toRun.filter((c) => c._gold_source === 'computed-at-runtime');
   if (unaudited.length)
     console.log(`\nNote: gold computed at runtime for ${unaudited.map((c) => c.name).join(', ')} — run 'npm run eval:gold' to commit those numbers.`);
 
-  process.exit(passedCases === caseResults.length ? 0 : 1);
-})().catch((e) => { console.error('FATAL:', e.stack || e); process.exit(1); });
+  process.exit(passedCases === caseResults.length ? EXIT_OK : EXIT_CASES_FAILED);
+})().catch((e) => {
+  // Restore BEFORE reporting: a crash must never be the reason someone's
+  // CLAUDE.md is left as a scratch prompt.
+  restoreNow();
+  console.error('FATAL:', e.stack || e);
+  process.exit(EXIT_ERROR);
+});

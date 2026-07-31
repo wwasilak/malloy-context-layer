@@ -39,7 +39,10 @@ merged as `838de26`.
 
 ### Picked up next, in order
 
-1. **SIMP-5** — with the `--bare`/auth caveat recorded in its section.
+1. **Run `npm run eval:selftest`** — SIMP-5 rebuilt it on `--protocol` and
+   nothing has driven the new path with a real agent. ~4 tier-2 runs, $2-4. It
+   answers a question no unit test can: do the two regressions still
+   DISCRIMINATE?
 2. **EVAL-5 harvesting** — now the binding constraint on the correlation check
    itself: two tier-1 cases is a thin basis for a claim about a whole lane, and
    the check gets more convincing with every case that declares tier 1 — as long
@@ -63,8 +66,8 @@ becomes the bottleneck), Phase 3b and Phase 4.
 
 ### Gates, and how to run them
 
-`npm test` (73 cases, no database, ~1.3s) → `npm run build` (validation + tier-0
-eval checks + write-back; must leave the tree clean) → `npm run eval:check`
+`npm test` (85 cases, ~2s — one of them spawns the real CLI) → `npm run build`
+(validation + tier-0 eval checks + write-back; must leave the tree clean) → `npm run eval:check`
 (standalone form of the same tier-0 checks).
 
 - `npm run eval -- --case <name> --runs 1 --no-stamp` — a single live case.
@@ -72,6 +75,8 @@ eval checks + write-back; must leave the tree clean) → `npm run eval:check`
   (EVAL-12b). Refuses to run with `--live`.
 - `npm run eval -- --concurrency 4` — fan out, after one serial run warms the
   prompt cache.
+- `npm run eval -- --protocol <path>` — run against a different CLAUDE.md
+  (SIMP-5). Swapped in and restored; results go to `evals/results/protocol/`.
 - `npm run eval:correlate` — the cheap-lane validation. Costs 2x the runs of the
   cases it covers, so it rides the schedule, not PRs.
 
@@ -820,18 +825,64 @@ In `eval.yml` the separate `gold` job is gone, surviving as a pre-flight step in
 the sweep job so a broken case still cannot spend a sweep. Both new failure modes
 verified by deliberately breaking them.
 
-### SIMP-5 · `selftest` becomes a flag, not a file · OPEN (with SIMP-1)
+### SIMP-5 · `selftest` becomes a flag, not a file · DONE
 
-It is "run 2 cases against a different protocol file": `run.js --protocol <path>`.
-Keep the idea — it is the best thing in the harness — and delete the separate
-script with its backup/restore/SIGINT dance.
+Shipped as `run.js --protocol <path>` (`evals/lib/protocol.js`), with the
+control prompt promoted out of a JS string literal into a reviewable file,
+`evals/protocols/stripped-analyst.md`. `selftest.js` went from 134 lines to ~90
+and now holds only what is genuinely its own: which cases discriminate, and the
+verdict. The backup file, the dirty-tree guard, the `finally` and the SIGINT
+handler moved into the runner, which already owns everything else about a run's
+lifecycle.
 
-**Note from EVAL-12a, decide before writing it.** Tier 1 auto-discovers
-`CLAUDE.md` from the working directory exactly as tier 2 does, so `--protocol` has
-to work for both lanes. Doing it without a file swap means `--bare` plus explicit
-injection, and `--bare` forces `ANTHROPIC_API_KEY`-only auth (no OAuth/keychain) —
-fine in CI, breaks a local run on OAuth. Either keep the file swap, or make
-`--bare` conditional and say so.
+**The `--bare` question this section left open is answered: keep the swap.**
+Both lanes DISCOVER `CLAUDE.md` from the working directory — tier 1 does it
+exactly as tier 2 does, because "tier 1 differs from tier 2 in TOOLS and TURNS
+and nothing else" (EVAL-12a) is what makes the correlation check a comparison
+rather than two unrelated measurements. Injecting into one lane and discovering
+in the other breaks that, and `--bare` additionally forces API-key-only auth,
+which is fine in CI and breaks a local OAuth run. Nothing was worth that.
+
+**A constraint that did not exist when this item was written.** EVAL-12b put the
+protocol digest inside every `case_fingerprint`, and EVAL-6 already had it in
+`semantic_identity`. So the swap MUST happen before either is computed —
+otherwise a stripped-protocol run carries the shipped protocol's identity, its
+rows sit in the ledger looking like evidence about the real product, and
+`--select` is entitled to skip a real case on the strength of a run that
+deliberately used the wrong rules. Ordering alone is not a guarantee, so
+`assertActive` compares the identity's protocol digest against the file and
+fails loudly; a mutation that moves the swap after the identity was confirmed to
+trip it.
+
+**Exit codes are now a taxonomy, and the selftest is why.** `0` all passed, `1`
+a case failed, `2` nothing ran. The stripped phase EXPECTS failure, so "the
+harness never ran" and "the cases failed" arriving as the same code would let a
+run that never happened deliver exactly the answer that phase was hoping for.
+Dirty `CLAUDE.md`, a leftover backup, a missing protocol file: all of them used
+to exit 1.
+
+**Other properties.** Results land in `evals/results/protocol/` and never stamp
+`last_validated` (both for the same reasons EVAL-12d gave for the correlation
+check). A leftover `CLAUDE.md.protocol-backup` refuses the run rather than being
+overwritten — that file is somebody's real protocol and a new backup would
+destroy the only copy.
+
+**And the test that had to be fixed before it was worth having.** The wiring
+test drives the real CLI down its crash path and checks the tree afterwards. Its
+first version treated "the guard refused" as a reason to return early — and a
+stray backup left by an earlier experiment sent it down exactly that path, so it
+reported a pass while testing nothing, and a mutation that deletes the restore
+went green underneath it. Now a leftover backup is a hard failure with
+instructions, and the one legitimate blocked case (uncommitted protocol edits)
+reports as SKIPPED rather than passed. Both mutations — dropping the restore,
+and collapsing exit 2 into exit 1 — go red.
+
+**Not verified live.** `npm run eval:selftest` has not been run against the new
+path; it is ~4 tier-2 runs, $2-4. The mechanics are covered by 8 unit tests plus
+the wiring test, and the swap/restore/identity/exit-code behaviour was driven
+end-to-end through the real CLI with a stub agent — but whether the two
+regressions still DISCRIMINATE is a claim about the protocol, not the harness,
+and only a live selftest settles it.
 
 ### SIMP-6 · Snapshot + diff instead of authored assertions · OPEN (the out-of-the-box one)
 
