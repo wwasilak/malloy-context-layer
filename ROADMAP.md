@@ -33,7 +33,7 @@ merged as `838de26`.
 | `782b51d` | EVAL-12a / SIMP-1 (the tier-1 lane) |
 | `ead4173` | EVAL-12d (the correlation check) + EVAL-14 (transport failures are not verdicts) |
 | `f915fec` | EVAL-12c (the cache we already had, and the premise that said we didn't) |
-| *pending* | EVAL-12b (impact selection + concurrency) — cite the sha once committed |
+| `48e581f` | EVAL-12b (impact selection + concurrency), which closes EVAL-12 |
 
 **EVAL-12 is closed.** All four levers plus the invariant have shipped.
 
