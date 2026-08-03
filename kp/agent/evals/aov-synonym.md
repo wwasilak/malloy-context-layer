@@ -9,6 +9,9 @@ tier: 1
 gold_query: "run: sales_performance -> { aggregate: average_order_value; where: DT.year = @2023 }"
 must_use: kp:AverageOrderValue
 must_not_contain: ["total_sales/order_count", "total_sales / order_count"]
+# SIMP-5 audit (2026-08-03): without this the case passed against a
+# deliberately UNGOVERNED protocol — see the note at the end.
+expect_receipt: true
 ---
 Tests that "AOV" routes to kp:AverageOrderValue via synonyms, not an improvised sum/count.
 
@@ -34,3 +37,23 @@ expected method.
 `must_not_contain` guards the tier-3 failure specific to this concept:
 re-deriving AOV as total_sales / order_count instead of using the bound
 measure. Both agree today; they diverge the day the definition changes.
+
+## Why `expect_receipt` is here (SIMP-5 audit, 2026-08-03)
+
+The full selftest ran every case against a deliberately ungoverned analyst
+protocol, and this case **passed** — it was not testing the Knowledge Plane.
+
+The reason is specific to tier 1: the harness injects the routing table into the
+prompt, so "resolve AOV to `kp:AverageOrderValue` and query its binding" is
+answerable from the table the harness handed over, with or without CLAUDE.md.
+`must_use`, `must_not_contain` and the gold query shape were all satisfied that
+way.
+
+What the stripped protocol *did* cost the agent was the **receipt**: this case
+recorded `receipt_present: true` under the real protocol and `false` under the
+stripped one, on the same question. So CLAUDE.md is demonstrably still doing
+work at tier 1 — the case simply was not asserting the part that depends on it.
+
+Asserting it costs nothing (the shipped run already produces one) and makes the
+case discriminate at tier 1, which is worth having: `refusal-routing-decision`
+is exempt from the selftest precisely because it has no such lever.

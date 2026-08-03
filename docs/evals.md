@@ -29,6 +29,7 @@ npm run eval:gold                 # (re)compute expect_value from each gold_quer
 npm run eval:check                # verify cases parse + gold has not drifted (no agent)
 npm run eval:report               # pass rate by category + flips vs the previous run
 npm run eval:selftest             # does the harness detect what it is for?
+npm run eval:selftest -- --all    # audit EVERY case, not just the two regressions
 npm run eval -- --protocol evals/protocols/stripped-analyst.md --case <name>
 ```
 
@@ -91,8 +92,13 @@ that compiles a model gets the required URIs echoed into its trace for free. The
 first live selftest after SIMP-5 caught exactly this: `financial-situation-
 projection` carried `must_use` and nothing else, and **passed against a
 deliberately ungoverned protocol**, emitting no receipt and never reading the
-Knowledge Plane. At tier 2, `must_use` on its own is not evidence of routing.
-(At tier 1 it is, since there are no tools and nothing to echo.)
+Knowledge Plane.
+
+**`must_use` is no stronger at tier 1**, for a different reason: there are no
+tools to echo anything, but the tier-1 prompt *injects the routing table*, so
+naming the right concept and its binding is answerable from the prompt itself.
+The 2026-08-03 audit found `aov-synonym` hollow on exactly that. Whichever lane
+a case runs in, `must_use` alone is not evidence that the agent routed.
 
 ### Cost as an assertion (AGT-3)
 
@@ -635,3 +641,35 @@ regression case with the corrected result as gold. Target ~30 cases with
 refusal and tier-boundary over-represented, since those catch the worst
 failures. Establish the loop: every correction filed gets an eval case in the
 same PR.
+
+### Auditing a case: is it testing the protocol at all?
+
+`npm run eval:selftest -- --all` runs every case through both phases. The
+default stays the two known regressions, because that is the cheap gate; `--all`
+is the periodic audit, and it is the only mechanism here that answers the
+question empirically.
+
+It has to be periodic, because **reading a case cannot tell you** — a hollow one
+looks exactly like a thorough one. Two of the six were found hollow this way:
+
+| case | looked like | actually satisfied by |
+|---|---|---|
+| `financial-situation-projection` | 5 `must_use` concepts | compile output, which echoes `# concept` annotations from `models/` |
+| `aov-synonym` | `must_use` + `must_not_contain` + gold query shape | the routing table, which the **tier-1 prompt injects** |
+
+Both were fixed by asserting the one thing an ungoverned agent reliably fails to
+produce: the AGT-1 receipt. That generalises — **prefer `expect_receipt: true`
+on any case that returns a figure**, because the receipt depends on a rule that
+lives only in `CLAUDE.md`, whereas routing can be supplied by the models or by
+the harness.
+
+One case is exempt, by name and with its reason printed on every run:
+`refusal-routing-decision`'s entire right answer is "CLV is absent from the
+routing table", and the harness injects that table — so the answer is readable
+off the prompt under any protocol, and it returns no figure, hence no receipt to
+assert. Exemptions are listed in `selftest.js` rather than inferred from a tier,
+so they stay reviewable; naming a case that no longer exists is a hard error.
+
+**When the selftest reports BAD, fix the case, not the control.** Weakening the
+stripped prompt to make a case fail proves nothing. See
+`evals/protocols/README.md`.

@@ -39,16 +39,14 @@ merged as `838de26`.
 
 ### Picked up next, in order
 
-1. **Re-run `npm run eval:selftest` on the next sweep.** It ran on 2026-07-31
-   and found a case that did not test the protocol; the fix was confirmed by
-   re-grading the rows on disk, not by a fresh run. ~4 tier-2 runs, $2-4.
-2. **EVAL-5 harvesting** — now the binding constraint on the correlation check
-   itself: two tier-1 cases is a thin basis for a claim about a whole lane, and
-   the check gets more convincing with every case that declares tier 1 — as long
-   as each new one re-runs it. It is also what makes impact selection worth
-   anything: selecting 2 of 6 cases saved $0.15 on 2026-07-31, selecting 20 of
-   30 is the point.
-3. **The ROADMAP is current** — no pending write-up.
+1. **EVAL-5 harvesting** — now the binding constraint on three separate things:
+   the correlation check (two tier-1 cases is a thin basis for a claim about a
+   whole lane), impact selection (selecting 2 of 6 saved $0.15; 20 of 30 is the
+   point), and OKF-5's before/after migration comparison. **Every new case
+   should have `eval:selftest --case <name>` run over it before it counts as
+   coverage** — 2026-08-03 found two of six existing cases testing nothing while
+   looking thorough, so an unaudited case is a claim, not a test.
+2. **The ROADMAP is current** — no pending write-up.
 
 **Then:** pick a server — INT-1/INT-2 first (both runtime-independent), then
 INT-3a or INT-3b with INT-6.
@@ -85,9 +83,10 @@ over. `npm test` is now wired into the build gate ahead of `build.js`.
 
 ### What live runs cost
 
-**Spent so far: ~$18.** ~$1.40 (29 Jul) + ~$4.30 (30 Jul — three correlation
+**Spent so far: ~$24.30.** ~$1.40 (29 Jul) + ~$4.30 (30 Jul — three correlation
 runs, one of them the contaminated one) + $0.53 + $8.72 + ~$3 (31 Jul — EVAL-12b's probe,
-its confirming sweep, and the selftest that found a hollow case). A 2-case x 3-run correlation is ~$2.50 for both
+its confirming sweep, and the selftest that found a hollow case) + $6.30 (3 Aug — the full selftest audit,
+which found a second one). A 2-case x 3-run correlation is ~$2.50 for both
 lanes together.
 
 **The cheapest useful live measurement in this repo is the tier-1 probe: 2 cases
@@ -166,7 +165,7 @@ provenance-stamped results file; `npm run eval:report` diffs the last two runs.
 | EVAL-3 | Results as telemetry | done | One JSONL row per (case × run) in `evals/results/`, plus a `run_meta` header line. Records verdict + reason, answer excerpt, executed Malloy, extracted vs expected, tokens, cost, latency, turns, receipt presence, semantic identity, model, runtime, data source. `evals/report.js` prints per-category pass rate, pass→fail flips and flaky cases. `last_validated` stamping on passing `must_use` concepts — the writer `ARCHITECTURE.md` documented but nothing implemented. |
 | EVAL-4 | Fixture data for CI | done (no new files) | The parquets under `ParquetFiles/` are already committed, so CI checks out byte-identical data and gold values are already stable. A second sampled copy would add a sync burden and a fixture-vs-live gold discrepancy for no gain, so `fixtures` means the committed set resolved via WORKDIR (as `build.js` does), and `--live` switches to `EVAL_LIVE_WORKDIR`. |
 | EVAL-6 | Semantic identity hash | done | `sha256(digest(kp/) + digest(models/) + digest(CLAUDE.md) + malloy/duckdb/dialect)` on every result row; `eval:report` uses it to say whether a flip means the data moved or the meaning moved. Digests the WORKING TREE (evals matter most on uncommitted edits); git tree shas recorded alongside with a dirty flag. `CLAUDE.md` is included because the routing protocol can move every number without touching a concept. |
-| EVAL-5 | Seed from real usage | **ongoing** | Both known regressions run and are covered by the selftest — which on 2026-07-31 proved one of them was not testing the protocol at all (see SIMP-5). Harvesting from question-log/corrections continues; target ~30 cases, refusal + tier-boundary over-represented. |
+| EVAL-5 | Seed from real usage | **ongoing** | All 6 cases audited by the selftest on 2026-08-03: 5 demonstrably test the protocol, 1 is documented as untestable by that method, 0 unaudited. Two were found hollow and fixed along the way (see SIMP-5). Harvesting from question-log/corrections continues; target ~30 cases, refusal + tier-boundary over-represented. |
 
 ### Also shipped, not in the original spec
 
@@ -928,6 +927,66 @@ for is a contamination waiting to happen, so the rules moved to
 selftest reports BAD, the fix belongs in the CASE and never in the control.
 Weakening the control to make a case fail proves nothing.
 
+**AUDITED ACROSS EVERY CASE, 2026-08-03 — evidence:
+`evals/results/selftest/2026-08-03T*`.** `--all` was added (default stays the two
+regressions, so the cheap gate is unchanged) and every case was run through both
+phases: 12 runs, $6.30.
+
+```
+OK   financial-situation-projection  stripped=fail, real=pass   <- yesterday's fix, confirmed LIVE
+OK   membership-verbatim             stripped=fail, real=pass   <- previously unaudited
+OK   no-rederivation-margin          stripped=fail, real=pass
+OK   refusal-ungoverned              stripped=fail, real=pass   <- previously unaudited
+BAD  aov-synonym                     stripped=PASS, real=pass   <- second hollow case
+INFO refusal-routing-decision        exempt (see below)
+```
+
+Two of the four tier-2 cases had never been audited and both discriminate — and
+via three different mechanisms, which is healthy: `expect_receipt` (2 cases), a
+`query_shape` mismatch (`membership-verbatim` — the ungoverned agent got the
+membership rule wrong), and the `refusal` kind (`refusal-ungoverned` computed a
+number instead of declining).
+
+**It also confirmed yesterday's fix live**, which had only been established by
+re-grading rows on disk. `financial-situation-projection` now fails the stripped
+phase.
+
+**And it found a second hollow case, `aov-synonym`.** The cause is different
+from the first and specific to tier 1: the harness INJECTS the routing table
+into the tier-1 prompt, so "resolve AOV to `kp:AverageOrderValue` and query its
+binding" is answerable from the table the harness handed over, protocol or no
+protocol. `must_use`, `must_not_contain` and the gold query shape were all
+satisfied that way.
+
+**A claim written earlier the same day, and corrected by the measurement.** The
+first draft of this said the tier-1 prompt "IS most of the protocol", so tier-1
+cases were made structurally ungradeable. The data says otherwise: `aov-synonym`
+recorded `receipt_present: true` under the real protocol and `false` under the
+stripped one, on the same question. CLAUDE.md still does work at tier 1 — that
+case simply was not asserting the part that depends on it. Adding
+`expect_receipt: true` makes it discriminate, and re-grading the recorded rows
+confirms it: SHIPPED still passes, STRIPPED now fails.
+
+**So the exemption is one case, by name, with its reason** — not a blanket
+tier-1 rule that would silently exempt every future tier-1 case too.
+`refusal-routing-decision` is beyond this test because its ENTIRE right answer
+is "CLV is absent from the routing table", and the harness injects that table;
+it also returns no figure, so there is no receipt to assert. The exemption
+prints on every run, and a stale entry naming a case that no longer exists is a
+hard error.
+
+**Where that leaves the suite:** 5 of 6 cases are now demonstrated to test the
+protocol, 1 is documented as untestable by this method, and 0 are unaudited.
+
+**The general lesson, and it is not about tier 1.** Both hollow cases were
+satisfied by something the HARNESS or the REPO supplied — compile output
+carrying `# concept` annotations in one, the injected routing table in the
+other. Neither could have been caught by reading the case: they look like
+thorough assertions. What separates a case that tests the protocol from one that
+does not is whether some part of its assertion set depends on a rule that lives
+ONLY in CLAUDE.md. Today the receipt is the reliable such lever, which is an
+argument for `expect_receipt: true` on any case that returns a figure.
+
 ### SIMP-6 · Snapshot + diff instead of authored assertions · OPEN (the out-of-the-box one)
 
 **Trigger:** when hand-authoring toward ~30 cases starts to feel like the
@@ -1219,6 +1278,20 @@ this check is reading?* EVAL-7 — compile output supplying a FORBIDDEN pattern,
 failing a correct agent. Here — compile output supplying a REQUIRED one, passing
 an incorrect one. **When adding an assertion, ask what else in the repo could
 satisfy it besides the behaviour under test.**
+
+**Fourth variant, found two days later by the same tool.** `aov-synonym` was
+hollow for a different supplier: the HARNESS injects the routing table into the
+tier-1 prompt, so its routing assertions were answerable from the prompt itself.
+Compile output, injected context — the pattern generalises past any one source.
+The practical test that survives all four: **does some part of this case's
+assertion set depend on a rule that lives ONLY in `CLAUDE.md`?** Today the AGT-1
+receipt is the reliable such lever, which is a good argument for
+`expect_receipt: true` on any case that returns a figure.
+
+And the reason both were caught at all: the selftest is the only mechanism here
+that asks the question empirically. **A case is not coverage until it has been
+audited** — reading it cannot tell you, because a hollow case looks exactly like
+a thorough one.
 
 And the corollary about guards: EVAL-10 already required "at least one
 cross-check" on `analysis` cases, and that guard was GREEN on this case
