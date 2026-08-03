@@ -39,13 +39,12 @@ merged as `838de26`.
 
 ### Picked up next, in order
 
-1. **EVAL-5 harvesting** — now the binding constraint on three separate things:
-   the correlation check (two tier-1 cases is a thin basis for a claim about a
-   whole lane), impact selection (selecting 2 of 6 saved $0.15; 20 of 30 is the
-   point), and OKF-5's before/after migration comparison. **Every new case
-   should have `eval:selftest --case <name>` run over it before it counts as
-   coverage** — 2026-08-03 found two of six existing cases testing nothing while
-   looking thorough, so an unaudited case is a claim, not a test.
+1. **Unblock EVAL-5, which harvesting cannot do on its own.** The question log,
+   gap log and corrections list are all empty, so there is nothing left to
+   harvest — see EVAL-5's section for the three options. The cheapest and most
+   valuable is reviewing the ~50 recorded agent runs for a WRONG answer that
+   PASSED: real behaviour, real protocol, free to read, and the highest-value
+   case there is.
 2. **The ROADMAP is current** — no pending write-up.
 
 **Then:** pick a server — INT-1/INT-2 first (both runtime-independent), then
@@ -83,10 +82,10 @@ over. `npm test` is now wired into the build gate ahead of `build.js`.
 
 ### What live runs cost
 
-**Spent so far: ~$24.30.** ~$1.40 (29 Jul) + ~$4.30 (30 Jul — three correlation
+**Spent so far: ~$25.55.** ~$1.40 (29 Jul) + ~$4.30 (30 Jul — three correlation
 runs, one of them the contaminated one) + $0.53 + $8.72 + ~$3 (31 Jul — EVAL-12b's probe,
 its confirming sweep, and the selftest that found a hollow case) + $6.30 (3 Aug — the full selftest audit,
-which found a second one). A 2-case x 3-run correlation is ~$2.50 for both
+which found a second one) + $1.24 (3 Aug — auditing the one case EVAL-5 could harvest). A 2-case x 3-run correlation is ~$2.50 for both
 lanes together.
 
 **The cheapest useful live measurement in this repo is the tier-1 probe: 2 cases
@@ -165,7 +164,60 @@ provenance-stamped results file; `npm run eval:report` diffs the last two runs.
 | EVAL-3 | Results as telemetry | done | One JSONL row per (case × run) in `evals/results/`, plus a `run_meta` header line. Records verdict + reason, answer excerpt, executed Malloy, extracted vs expected, tokens, cost, latency, turns, receipt presence, semantic identity, model, runtime, data source. `evals/report.js` prints per-category pass rate, pass→fail flips and flaky cases. `last_validated` stamping on passing `must_use` concepts — the writer `ARCHITECTURE.md` documented but nothing implemented. |
 | EVAL-4 | Fixture data for CI | done (no new files) | The parquets under `ParquetFiles/` are already committed, so CI checks out byte-identical data and gold values are already stable. A second sampled copy would add a sync burden and a fixture-vs-live gold discrepancy for no gain, so `fixtures` means the committed set resolved via WORKDIR (as `build.js` does), and `--live` switches to `EVAL_LIVE_WORKDIR`. |
 | EVAL-6 | Semantic identity hash | done | `sha256(digest(kp/) + digest(models/) + digest(CLAUDE.md) + malloy/duckdb/dialect)` on every result row; `eval:report` uses it to say whether a flip means the data moved or the meaning moved. Digests the WORKING TREE (evals matter most on uncommitted edits); git tree shas recorded alongside with a dirty flag. `CLAUDE.md` is included because the routing protocol can move every number without touching a concept. |
-| EVAL-5 | Seed from real usage | **ongoing** | All 6 cases audited by the selftest on 2026-08-03: 5 demonstrably test the protocol, 1 is documented as untestable by that method, 0 unaudited. Two were found hollow and fixed along the way (see SIMP-5). Harvesting from question-log/corrections continues; target ~30 cases, refusal + tier-boundary over-represented. |
+| EVAL-5 | Seed from real usage | **blocked** | 7 cases; the harvest sources are empty, so this cannot proceed by harvesting. See its section below. |
+
+### EVAL-5 · Seed from real usage · BLOCKED on real usage (7 of ~30 cases)
+
+**The harvest sources are empty, and that is the finding.** EVAL-5's rule is
+*harvest, don't invent*, and its three sources say this on 2026-08-03:
+
+| source | entries |
+|---|---|
+| `kp/agent/question-log.md` | 0 |
+| `kp/agent/gap-log.md` | 0 |
+| `kp/agent/corrections.md` | 0 corrections, 1 standing hint |
+
+So the backlog this item is supposed to draw from does not exist yet. The plane
+has not been used by anyone whose questions were logged — every case in the
+suite came from the two known regressions or from reviewing sweeps.
+
+**One item WAS available and is now harvested.** `standing-hint-window`
+(`contains`, tier 2) tests the standing hint in `corrections.md`: the
+`kp:ActiveCustomer` measure compiles "last 2 years" against `LOCALTIMESTAMP`, so
+the agent must state the window it actually applied. CLAUDE.md tells the agent
+to check standing hints before answering, and `corrections.md` sits inside the
+semantic identity precisely because editing it can move an answer — but nothing
+asserted that the pathway works. Now something does. Audited on arrival:
+`stripped=fail, real=pass`.
+
+**Its assertion was measured, not guessed**, which is the transferable part.
+Every candidate phrase was scored against the 10 recorded runs of that question:
+`wall clock` appears in 7/7 correct answers and 0/3 incorrect ones, while
+`2024-04-20` appears in 7/7 correct AND 2/3 incorrect — because the two wrong
+answers state the window is "anchored to the data's max order date, not today",
+the exact inversion of the defect, while quoting the right date. A check on the
+date would have passed an answer that says the opposite of the truth. **The
+recorded results are a corpus for authoring assertions, and using them costs
+nothing.**
+
+**What would actually unblock this.** Not more invention — the last three days
+found two of six existing cases testing nothing while looking thorough, and
+invented cases are exactly the ones most likely to assert what the author
+imagines instead of what goes wrong. The options, in order of value:
+
+1. **Use the plane for real work and let the logs fill.** The intended path.
+   Every novel analysis logged is a candidate; every correction filed is a
+   regression case with its corrected result as gold.
+2. **Review the ~50 recorded agent runs for silent wrongness.** They are real
+   behaviour under the real protocol and nobody has read them for correctness,
+   only for verdicts. A wrong answer that PASSED is the highest-value case there
+   is, and it would be free to find.
+3. **Mine `question-log.md`'s intent by asking the models what they can answer**
+   — weakest, since it invents questions, but it at least targets real bindings.
+
+**Standing rule for every case added from here:** run
+`npm run eval:selftest -- --case <name>` before counting it as coverage. A case
+is a claim until it has been audited; two of six were claims.
 
 ### Also shipped, not in the original spec
 

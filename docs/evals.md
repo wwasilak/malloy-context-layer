@@ -673,3 +673,29 @@ so they stay reviewable; naming a case that no longer exists is a hard error.
 **When the selftest reports BAD, fix the case, not the control.** Weakening the
 stripped prompt to make a case fail proves nothing. See
 `evals/protocols/README.md`.
+
+### Two rules learned the hard way (2026-08-03)
+
+**1. Audit every new case before counting it as coverage.** Run
+`npm run eval:selftest -- --case <name>`. Two of the six existing cases were
+found testing nothing while looking thorough; reading a case cannot tell you,
+because a hollow one looks exactly like a good one.
+
+**2. Author assertions from recorded runs, not from imagination.** The result
+files under `evals/results/` are a corpus of real answers to the same questions,
+and mining them costs nothing. `standing-hint-window` chose its
+`expect_contains` phrase by scoring candidates against 10 recorded runs of its
+question:
+
+| candidate | in correct (7) | in incorrect (3) |
+|---|---|---|
+| `wall clock` | 7 | 0 |
+| `LOCALTIMESTAMP` | 6 | 0 |
+| `2024-04-20` | 7 | 2 |
+| `last 2 years`, `window` | 7 | 3 |
+
+The obvious choice — the data-coverage date — would have been wrong: the two
+incorrect answers quote `2024-04-20` while stating the window is anchored to it
+"not today", which is the exact inversion of the defect under test. Guessing
+would have shipped a case that passes an answer saying the opposite of the
+truth.
