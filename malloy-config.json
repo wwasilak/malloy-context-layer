@@ -3,7 +3,7 @@
     "duckdb": {
       "is": "duckdb",
       "databasePath": ":memory:",
-      "workingDirectory": "/workspace",
+      "workingDirectory": "C:/Users/wwasi/Desktop/malloy/malloy_knowledge_plane_okf",
 
       "allowCommunityExtensions": true,
       "autoinstallKnownExtensions": true,

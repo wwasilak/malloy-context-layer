@@ -82,11 +82,24 @@ over. `npm test` is now wired into the build gate ahead of `build.js`.
 
 ### What live runs cost
 
-**Spent so far: ~$25.55.** ~$1.40 (29 Jul) + ~$4.30 (30 Jul — three correlation
-runs, one of them the contaminated one) + $0.53 + $8.72 + ~$3 (31 Jul — EVAL-12b's probe,
-its confirming sweep, and the selftest that found a hollow case) + $6.30 (3 Aug — the full selftest audit,
-which found a second one) + $1.24 (3 Aug — auditing the one case EVAL-5 could harvest). A 2-case x 3-run correlation is ~$2.50 for both
-lanes together.
+**Spent so far: $36.94** — measured, not tallied:
+
+```
+npm run eval:report -- --view sweeps      # sums cost_usd over every recorded run
+  sweep        51 runs   $22.32
+  selftest      9 runs    $5.86
+  correlation  24 runs    $4.43
+  protocol      9 runs    $4.35
+```
+
+**This line used to read ~$25.55, and it was wrong by 31%** — the first
+non-trivial question put to `evals/results.malloy` (SIMP-2) corrected it. The
+hand-maintained tally counted the runs someone remembered to add up and missed
+whole streams; the model sums the rows. A figure maintained by hand across a
+dozen commits drifts, and nothing was checking it. Re-read it from the model
+rather than incrementing it.
+
+A 2-case x 3-run correlation is ~$2.50 for both lanes together.
 
 **The cheapest useful live measurement in this repo is the tier-1 probe: 2 cases
 x 3 runs at $0.53, ~64s.** It exercises the scheduling, gives a readable
