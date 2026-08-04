@@ -12,4 +12,4 @@ comparison) - not routine metric lookups.
 | Date | Question | Concepts used | Method | Tier |
 |---|---|---|---|---|
 | 2026-08-04 | Total sales variance between years | kp:TotalSales | YoY change and percentage growth using `lag()` | 2 |
-| 2026-08-04 | Top 5 customers buying bikes | kp:TotalSales, kp:Customer, kp:Product | Drill-down to product category (bikes) and aggregate by customer | 2 |
+| 2026-08-04 | Top 5 customers buying "bikes" | kp:TotalSales (governed measure only) | kp:TotalSales sliced by an UNGOVERNED product-name filter `lower(ProductName) ~ '%bike%'` and grouped by ungoverned customer name fields. "Bike" is not a governed category — see `gap-log.md`. First attempt used `~ '%ike%'` and was wrong (matched SLR-**like** cameras, 96% of revenue) — see `corrections.md` | 3 |
