@@ -100,6 +100,16 @@ and `kp/` are what gets tested, not a stub.
    meaning moved.
 5. Passing cases stamp `last_validated` on their `must_use` concepts (the writer
    of the field described above).
+6. Two opt-in economies (EVAL-12b): `--select` skips a case whose per-case
+   fingerprint — its file, its `must_use` concepts, the routing surface, the
+   standing hints, `models/`, `CLAUDE.md`, the runtime — already has a clean
+   measurement on record; `--concurrency <n>` fans runs out after one serial
+   run has warmed the shared prompt cache. Neither is on by default.
+7. Reporting is itself a Malloy model (`evals/results.malloy`, SIMP-2) rather
+   than a bespoke differ: DuckDB reads the JSONL natively, so pass rate,
+   flakiness, cost, cache share and flips are measures and views and
+   `report.js` only prints them. The eval history is queryable with the tool
+   under test.
 
 Data: the committed `ParquetFiles/` are the fixture set — hermetic and
 byte-identical in CI. `--live` switches WORKDIR for scheduled drift runs.

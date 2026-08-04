@@ -148,4 +148,6 @@ function semanticIdentity({ kpDir = 'kp', modelsDir = 'models', runtimeSettings 
   };
 }
 
-module.exports = { semanticIdentity, treeDigest, sha256, porcelainPaths, VOLATILE_FILES };
+module.exports = {
+  semanticIdentity, treeDigest, fileDigest, sha256, porcelainPaths, VOLATILE_FILES,
+};

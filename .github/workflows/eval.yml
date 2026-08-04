@@ -9,10 +9,13 @@ name: eval
 # within a week. Promote to blocking once the pass rate is green and stable —
 # that is a one-line change: drop `continue-on-error` from the eval step.
 #
-# Two things DO gate here even today, because both are deterministic:
-#   1. every eval case parses and its gold_query still runs (eval:check);
-#   2. no committed gold value has drifted from what its gold_query yields.
-# Those catch a broken or rotted case without depending on an agent at all.
+# The deterministic checks that used to run here as their own job — every case
+# parses, every gold_query still runs, no committed gold value has drifted —
+# now run inside `npm run build` (SIMP-4), which already blocks the PR. They
+# are validation, and validation belongs in the build rather than in a second
+# gate that has to be remembered. What remains below is a pre-flight of the
+# same check in this job: it costs seconds and stops a broken case from
+# spending a whole sweep before the build workflow has gone red.
 #
 # Data: the parquet files under ParquetFiles/ are committed, so CI gets
 # byte-identical fixtures on every run and gold values are stable (EVAL-4).
@@ -28,24 +31,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  gold:
-    name: cases parse and gold queries run
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      # deterministic: no agent involved, so this one blocks
-      - name: Verify every case + committed gold value
-        run: npm run eval:check
-
   eval:
     name: agent eval sweep (report-only)
     runs-on: ubuntu-latest
-    needs: gold
     # The agent under test needs credentials. Skip rather than fail red on forks
     # and on any repo where the secret is not configured.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
@@ -59,15 +47,58 @@ jobs:
           cache: npm
       - run: npm ci
 
+      # Pre-flight: cheap, deterministic, and it fails before any spend.
+      - name: Verify every case + committed gold value
+        run: npm run eval:check
+
       - name: Install the agent under test
         run: npm install -g @anthropic-ai/claude-code
 
+      # EVAL-12b: impact selection skips a case whose fingerprint already has a
+      # clean measurement, and a fresh checkout has no measurements at all. This
+      # pulls the results of the last successful run on main so a PR has a
+      # ledger to consult. Best effort on purpose: if the artifact is missing,
+      # expired, or the download fails, the ledger is empty and `--select`
+      # degrades to a full sweep — the safe direction, and the same thing that
+      # happens today.
+      - name: Fetch the results ledger from main
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_id=$(gh run list --workflow eval.yml --branch main --status success \
+                     --limit 1 --json databaseId --jq '.[0].databaseId')
+          [ -n "$run_id" ] || exit 0
+          gh run download "$run_id" -n "eval-results-$run_id" -D evals/results
+
+      # --select on PRs only. A push to main, a schedule and a manual dispatch
+      # all run the full sweep: something has to keep re-measuring the cases a
+      # PR was allowed to skip, and the fingerprints are only as good as the
+      # sweep that last confirmed them.
       - name: Run evals against fixtures
         id: sweep
         continue-on-error: true          # <- remove to make the suite blocking
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: npm run eval -- --runs 3
+        run: |
+          extra=''
+          if [ "${{ github.event_name }}" = "pull_request" ]; then extra='--select'; fi
+          npm run eval -- --runs 3 --concurrency 4 $extra
+
+      # EVAL-12's invariant: a cheap tier is only trustworthy while it keeps
+      # agreeing with the expensive tier it replaces. This runs each tier-1 case
+      # in BOTH lanes and compares the verdicts, so a cheap lane that has
+      # drifted into passing what the real agent fails is caught here rather
+      # than by nobody. It costs 2x the runs of the cases it covers, so it rides
+      # the schedule and manual dispatch, never a PR.
+      - name: Correlation check — does the cheap lane still agree?
+        id: correlate
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        continue-on-error: true          # <- remove together with the sweep's
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: npm run eval:correlate -- --runs 3
 
       - name: Report pass rate and flips vs the previous run
         if: always()
@@ -78,7 +109,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: eval-results-${{ github.run_id }}
-          path: evals/results/*.jsonl
+          path: |
+            evals/results/*.jsonl
+            evals/results/correlation/**
           retention-days: 90
 
       - name: Summarise
@@ -92,6 +125,12 @@ jobs:
             else
               echo 'Some cases failed — report-only, not blocking this PR.'
             fi
+            echo ''
+            case "${{ steps.correlate.outcome }}" in
+              success) echo 'Correlation: ESTABLISHED — every tier-1 case was confirmed by a tier-2 run.' ;;
+              failure) echo 'Correlation: NOT established — the cheap lane disagrees with the expensive one. See the correlate step.' ;;
+              *)       echo 'Correlation check not run (schedule / manual dispatch only).' ;;
+            esac
             echo ''
             echo '```'
             npm run eval:report 2>&1 | tail -40 || true

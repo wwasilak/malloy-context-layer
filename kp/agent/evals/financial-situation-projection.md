@@ -18,11 +18,35 @@ gold_query: |
     order_by: yr
   }
 must_use: kp:TotalSales, kp:Margin, kp:MarginPercent, kp:GrossRevenue, kp:OrderCount
+# SIMP-5: added after the first live selftest, which caught this case passing
+# against a deliberately UNGOVERNED protocol. See the note below — `must_use`
+# alone could not tell the two apart.
+expect_receipt: true
 ---
 
 Tests tier-2 analysis freedom on top of governed bindings: 2023 figures pulled
 straight from `finance_order` (gross revenue, discount, margin, markup) and
 `sales_order` (trend), then a tier-2 projection layered on top.
+
+## Why `expect_receipt` is here
+
+This case used to carry `must_use` and nothing else, and the first live run of
+the rebuilt selftest (2026-07-31) found that it passed **without the governance
+protocol at all** — an ungoverned analyst prompt satisfied it while producing no
+receipt and never reading the Knowledge Plane.
+
+The mechanism: `must_use` searches the whole trace *including what came back
+from tools*, and every URI above appears in `models/*.malloy` as a `# concept`
+annotation. The agent compiled three models to inspect their schemas, the
+compile output echoed all five URIs into the trace, and the check was satisfied
+by the model files rather than by anything the agent decided. Since SIMP-4 made
+"approved but unbuilt" a hard build failure, *every* approved concept is
+annotated somewhere in `models/`, so this is general rather than a quirk of this
+case: **at tier 2, `must_use` on its own is not evidence of routing.**
+
+`expect_receipt` is the check that discriminates, and it is the same one that
+made `no-rederivation-margin` fail correctly in the same run. The AGT-1 footer
+is required by CLAUDE.md and an ungoverned prompt has no reason to emit one.
 
 Two things must go right:
 

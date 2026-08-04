@@ -1,0 +1,195 @@
+// =============================================================================
+// results.malloy — SIMP-2: the eval history as a semantic model.
+//
+//   The harness writes JSONL; DuckDB reads JSONL natively; we own a semantic
+//   layer. So the reporter stopped being 172 lines of hand-rolled grouping and
+//   became this, plus a thin runner that prints named views.
+//
+//   The side effect is the point as much as the deletion: the agent can analyse
+//   its own eval history with the exact tool under test. Every ad-hoc question
+//   asked while building EVAL-12b — cost per lane, cache creation per run, how
+//   many case_runs never answered — was a throwaway `node -e` script. They are views
+//   now.
+//
+//   TWO THINGS THE SQL LAYER HAS TO DO BEFORE MALLOY SEES THE DATA:
+//
+//   1. `case` is a reserved word in Malloy, so it is renamed to `case_name`
+//      here rather than back-quoted at every call site.
+//   2. `filename=true` gives each row its sweep. That is what makes "compare
+//      the last two case_runs" expressible at all — without it every sweep is one
+//      undifferentiated pile.
+//
+//   RESULT ROWS ONLY. Meta lines (`run_meta`, `selection`) share the file and
+//   are excluded by `kind is null` — the same rule `isResultRow` applies in JS,
+//   for the same reason: a skipped case must never be counted as a measurement
+//   of itself.
+// =============================================================================
+
+
+source: eval_case_runs is duckdb.sql(
+  """
+  SELECT
+    * EXCLUDE ("case"),
+    -- `case` is a RESERVED WORD in Malloy: `group_by: case` does not parse.
+    -- Renamed once here rather than back-quoted at every call site.
+    "case" AS case_name,
+    -- Which results file the row came from. parse_filename rather than a
+    -- regex: the backslash escaping needed to match a Windows path survives
+    -- neither the Malloy string nor the SQL literal intact, and it fails
+    -- SILENTLY to an empty name.
+    parse_filename(filename, true) AS sweep,
+    -- Which EXPERIMENT the row belongs to. Substring matches on the path, so
+    -- no separator escaping is involved. Order matters: a stripped-protocol
+    -- run inside the selftest lives under selftest/protocol/ and is tagged
+    -- 'protocol', because "ran under a swapped CLAUDE.md" is the fact that
+    -- decides how to read it.
+    CASE WHEN filename LIKE '%correlation%' THEN 'correlation'
+         WHEN filename LIKE '%protocol%'    THEN 'protocol'
+         WHEN filename LIKE '%selftest%'    THEN 'selftest'
+         ELSE 'sweep' END AS stream
+  FROM read_json_auto('evals/results/**/*.jsonl',
+    union_by_name = true,
+    format = 'newline_delimited',
+    filename = true
+  )
+  WHERE kind IS NULL
+  """
+  )
+
+   extend {
+
+    
+  measure:
+    // A run is one (case x run) attempt. Errored case_runs are NOT verdicts
+    // (EVAL-14) — they are counted separately and excluded from pass rate,
+    // because "the agent never answered" is not "the agent was wrong".
+    case_runs is count()
+    completed is count() { where: answered }
+    passed is count() { where: answered and pass }
+    failed is count() { where: answered and pass = false }
+    never_answered is count() { where: errored }
+    pass_rate is passed / nullif(completed, 0)
+
+    cost is sum(cost_usd)
+    tokens_used is sum(tokens)
+    avg_turns is avg(num_turns)
+    avg_latency_s is avg(latency_ms) / 1000
+
+    // EVAL-12c's sensor. A healthy sweep READS its shared prefix rather than
+    // writing it; a fan-out that warms wrongly shows up here and nowhere else.
+    // Only meaningful over tier-1 rows: a tier-2 session re-reads its own
+    // growing context every turn and always has something new to write.
+    cache_created is usage.cache_creation.sum()
+    cache_read is usage.cache_read.sum()
+    cache_read_share is cache_read / nullif(cache_read + cache_created, 0)
+
+    repairs_spent is sum(repairs)
+    receipts is count() { where: receipt_present }
+
+  dimension:
+    lane is pick 'tier 1' when tier = 1 pick 'tier 2' when tier = 2 else 'unrecorded'
+    verdict is pick 'errored' when errored pick 'pass' when pass else 'fail'
+    // `errored` did not exist before EVAL-14, so it is NULL on older rows.
+    // Comparing NULL = false yields NULL and silently drops those rows from
+    // every rate — aov-synonym read 11 passed out of 26 case_runs at a pass_rate of
+    // 1.0 before this. A row that never says it errored, did not.
+    answered is pick false when errored else true
+
+  // ---- views ---------------------------------------------------------------
+  //
+  // Scope note: the glob reads EVERY stream — sweeps, correlation, selftest
+  // and stripped-protocol runs — because that history is the most interesting
+  // thing here and excluding it is what forced every question about it to be a
+  // throwaway script.
+  //
+  // But a pass rate is only meaningful over the MAIN sweep stream. A
+  // stripped-protocol run is SUPPOSED to fail (that is the selftest working),
+  // and a forced-tier correlation run measures the harness rather than the
+  // product — averaging either in would report two different experiments as one
+  // number. So the rate views filter to `stream = 'sweep'` and the descriptive
+  // ones (sweeps, provenance) do not.
+
+  view: by_case is {
+    where: stream = 'sweep'
+    group_by: case_name
+    aggregate: case_runs, completed, passed, never_answered, pass_rate, cost
+    order_by: case_name
+  }
+
+  view: by_category is {
+    where: stream = 'sweep'
+    group_by: category
+    aggregate: case_runs, passed, pass_rate
+    order_by: category
+  }
+
+  view: by_lane is {
+    where: stream = 'sweep'
+    group_by: lane
+    aggregate: case_runs, pass_rate, cost, avg_turns, cache_read_share
+    order_by: lane
+  }
+
+  // A case that passes some runs and not others is not a healthy case, even
+  // when the quorum let it through. Worth seeing on its own.
+  view: flaky is {
+    where: stream = 'sweep'
+    group_by: case_name
+    aggregate: case_runs, passed, pass_rate
+    having: passed > 0 and passed < completed
+    order_by: pass_rate
+  }
+
+  // Every experiment, not just sweeps — this is where the selftest and
+  // correlation history becomes readable instead of being re-derived by hand.
+  view: sweeps is {
+    group_by: sweep, stream
+    aggregate: case_runs, passed, cost, never_answered
+    order_by: sweep desc
+  }
+
+  // What a sweep cost and where it went — the question asked repeatedly by
+  // hand while EVAL-12b was being built.
+  view: cost_by_case is {
+    where: stream = 'sweep'
+    group_by: case_name, lane
+    aggregate: case_runs, cost, avg_turns
+    order_by: cost desc
+  }
+
+  // The provenance question EVAL-6 exists to answer: did the meaning move, or
+  // did the data? Two sweeps at different identities are not comparable.
+  view: provenance is {
+    group_by: sweep, semantic_identity, data_source, model_id
+    aggregate: case_runs
+    order_by: sweep desc
+  }
+
+
+// The flip report: which cases changed verdict between the two most recent
+// sweeps. Expressed here rather than diffed in JS so that "what counts as a
+// run" is decided once — the old reporter re-implemented the quorum rule
+// alongside run.js and the two could drift.
+//
+// `lag()` MUST be calculated inside a nest keyed on the case. Written as a
+// flat two-stage pipeline it compiles to `LAG(passed) OVER (ORDER BY sweep)`
+// with no PARTITION BY, so each case's "previous" value is whatever case
+// happened to sort before it — and because the numbers are mostly 3s, the
+// output looks entirely reasonable. Nesting is what makes the window
+// per-case.
+view: flips is {
+  where: stream = 'sweep'
+  group_by: case_name
+  nest: history is {
+    group_by: sweep
+    aggregate: passed, completed
+    order_by: sweep asc
+    calculate: previously_passed is lag(passed)
+  }
+  order_by: case_name
+}
+   }
+
+run: eval_case_runs -> by_case
+run: eval_case_runs -> sweeps
+run: eval_case_runs -> flips

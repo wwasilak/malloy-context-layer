@@ -1,0 +1,110 @@
+{
+  "kind": "correlation",
+  "ts": "2026-07-30T09:52:26.768Z",
+  "runs": 3,
+  "quorum": 3,
+  "sources": [
+    "evals\\results\\correlation\\2026-07-30T09-44-43Z\\tier1\\2026-07-30T09-44-45Z.jsonl",
+    "evals\\results\\correlation\\2026-07-30T09-44-43Z\\tier2\\2026-07-30T09-46-56Z.jsonl"
+  ],
+  "provenance_problems": [],
+  "semantic_identity": "sha256:a4bee0fc978a4fd3b68a17654323865ce8ec1db5fa23e52e612e07f0314c6795",
+  "cases": [
+    {
+      "case": "aov-synonym",
+      "category": "synonym",
+      "declared_tier": 1,
+      "tier1": {
+        "present": true,
+        "total": 3,
+        "errored": 0,
+        "passed": 3,
+        "pass": true,
+        "flaky": false,
+        "reasons": [],
+        "match_tiers": [
+          "exact"
+        ],
+        "cost_usd": 0.377716,
+        "tokens": 68475,
+        "malloy_calls": 3,
+        "repairs": 1
+      },
+      "tier2": {
+        "present": true,
+        "total": 3,
+        "errored": 0,
+        "passed": 3,
+        "pass": true,
+        "flaky": false,
+        "reasons": [],
+        "match_tiers": [
+          "exact",
+          "subset"
+        ],
+        "cost_usd": 1.2457274999999999,
+        "tokens": 849341,
+        "malloy_calls": 13,
+        "repairs": 0
+      },
+      "class": "AGREE_PASS",
+      "gate": "ok",
+      "probe": false,
+      "establishes": true,
+      "note": "both lanes pass"
+    },
+    {
+      "case": "refusal-routing-decision",
+      "category": "refusal",
+      "declared_tier": 1,
+      "tier1": {
+        "present": true,
+        "total": 3,
+        "errored": 0,
+        "passed": 3,
+        "pass": true,
+        "flaky": false,
+        "reasons": [],
+        "match_tiers": [],
+        "cost_usd": 0.1770245,
+        "tokens": 49712,
+        "malloy_calls": 0,
+        "repairs": 0
+      },
+      "tier2": {
+        "present": true,
+        "total": 3,
+        "errored": 0,
+        "passed": 3,
+        "pass": true,
+        "flaky": false,
+        "reasons": [],
+        "match_tiers": [],
+        "cost_usd": 0.7253625,
+        "tokens": 377471,
+        "malloy_calls": 0,
+        "repairs": 0
+      },
+      "class": "AGREE_PASS",
+      "gate": "ok",
+      "probe": false,
+      "establishes": true,
+      "note": "both lanes pass"
+    }
+  ],
+  "summary": {
+    "correlated": 2,
+    "established": 2,
+    "disagreements": 0,
+    "false_green": [],
+    "false_red": [],
+    "inconclusive": [],
+    "probes": 0,
+    "promotable": [],
+    "cost": {
+      "tier1": 0.5547405,
+      "tier2": 1.9710899999999998
+    },
+    "verdict": "ESTABLISHED"
+  }
+}

@@ -1,7 +1,10 @@
 name: build
 
 # OPS-1: turn every guarantee in this repo from convention into a gate.
-# Runs the ONE build command on every PR (and on pushes to main):
+# Runs on every PR (and on pushes to main):
+#   0. `npm test` — the pure-function net: porcelain parsing, result comparison,
+#      query-text handling. No database, ~1s. It is here rather than in the eval
+#      workflow because it gates the code the eval loop is BUILT from.
 #   1. validate the Knowledge Plane bundle + compile every Malloy model,
 #   2. fail on any validation error (build.js exits non-zero),
 #   3. fail if the write-back left the working tree dirty — i.e. someone edited
@@ -31,6 +34,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Unit tests (parsing, grading, path handling — no database)
+        run: npm test
 
       - name: Build (validate KP against models + write-back)
         run: npm run build

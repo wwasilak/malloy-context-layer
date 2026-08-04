@@ -1,0 +1,115 @@
+{
+  "kind": "correlation",
+  "ts": "2026-07-30T09:34:52.044Z",
+  "runs": 3,
+  "quorum": 3,
+  "sources": [
+    "evals\\results\\correlation\\2026-07-30T09-11-43Z\\tier1\\2026-07-30T09-11-45Z.jsonl",
+    "evals\\results\\correlation\\2026-07-30T09-11-43Z\\tier2\\2026-07-30T09-26-45Z.jsonl"
+  ],
+  "provenance_problems": [],
+  "semantic_identity": "sha256:a4bee0fc978a4fd3b68a17654323865ce8ec1db5fa23e52e612e07f0314c6795",
+  "cases": [
+    {
+      "case": "aov-synonym",
+      "category": "synonym",
+      "declared_tier": 1,
+      "tier1": {
+        "present": true,
+        "total": 3,
+        "passed": 1,
+        "pass": false,
+        "flaky": true,
+        "reasons": [
+          "kind+must_use"
+        ],
+        "match_tiers": [
+          "exact"
+        ],
+        "cost_usd": 0.300207,
+        "tokens": 33621,
+        "malloy_calls": 1,
+        "repairs": 1
+      },
+      "tier2": {
+        "present": true,
+        "total": 3,
+        "passed": 2,
+        "pass": false,
+        "flaky": true,
+        "reasons": [
+          "kind+must_use"
+        ],
+        "match_tiers": [
+          "subset"
+        ],
+        "cost_usd": 0.913308,
+        "tokens": 539190,
+        "malloy_calls": 7,
+        "repairs": 0
+      },
+      "class": "AGREE_FAIL_SAME",
+      "gate": "warn",
+      "probe": false,
+      "establishes": false,
+      "note": "both lanes fail for the same reason — consistent, but a red case proves nothing about the proxy"
+    },
+    {
+      "case": "refusal-routing-decision",
+      "category": "refusal",
+      "declared_tier": 1,
+      "tier1": {
+        "present": true,
+        "total": 3,
+        "passed": 1,
+        "pass": false,
+        "flaky": true,
+        "reasons": [
+          "kind"
+        ],
+        "match_tiers": [],
+        "cost_usd": 0.13054700000000002,
+        "tokens": 16475,
+        "malloy_calls": 0,
+        "repairs": 0
+      },
+      "tier2": {
+        "present": true,
+        "total": 3,
+        "passed": 3,
+        "pass": true,
+        "flaky": false,
+        "reasons": [],
+        "match_tiers": [],
+        "cost_usd": 0.5559829999999999,
+        "tokens": 326207,
+        "malloy_calls": 0,
+        "repairs": 0
+      },
+      "class": "FALSE_RED",
+      "gate": "fail",
+      "probe": false,
+      "establishes": false,
+      "note": "tier 1 FAILS what tier 2 PASSES — the case needs the trajectory; move it back to tier 2"
+    }
+  ],
+  "summary": {
+    "correlated": 2,
+    "established": 0,
+    "disagreements": 1,
+    "false_green": [],
+    "false_red": [
+      "refusal-routing-decision"
+    ],
+    "inconclusive": [
+      "aov-synonym"
+    ],
+    "probes": 0,
+    "promotable": [],
+    "cost": {
+      "tier1": 0.430754,
+      "tier2": 1.469291
+    },
+    "verdict": "BROKEN"
+  }
+}

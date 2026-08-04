@@ -6,3 +6,6 @@ knowledge-catalog/
 
 # evals/results/*.jsonl IS committed on purpose — it is the regression history
 # that `eval:report` diffs. Only a sweep's console log is ignored (*.log above).
+# evals/results/correlation/ likewise: it is the evidence that the cheap lane
+# still agrees with the expensive one, which is what licenses running cases
+# cheap at all (EVAL-12).

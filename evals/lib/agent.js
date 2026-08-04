@@ -39,6 +39,33 @@ const DISALLOWED_TOOLS = ['Write', 'Edit', 'NotebookEdit', 'Bash'];
 const RUN_TOOLS = new Set(['mcp__malloy__run', 'mcp__malloy__run_file', 'mcp__claude_ai_Malloyyo__query']);
 const MALLOY_TOOLS = new Set([...RUN_TOOLS, 'mcp__malloy__compile', 'mcp__malloy__compile_file']);
 
+// ---- transport failures are not answers -------------------------------------
+// The CLI reports an API failure in the SAME envelope shape as a successful
+// reply: the error text arrives in `result`, so a 529 reaches the grader as an
+// answer reading "API Error: 529 Overloaded", which grades as a case that
+// routed to no concepts and ran no Malloy. Found the hard way — the first real
+// correlation run reported `refusal-routing-decision` as a lane disagreement
+// when the only difference between the lanes was which calls got a 529.
+//
+// The distinction that matters: a transport error means the agent NEVER
+// ANSWERED, so there is no behaviour to grade. A reply that fails to parse, or
+// hits the turn cap, IS behaviour and stays a genuine failure.
+const TRANSPORT_FIRST_LINE =
+  /^(?:API Error:\s*(\d{3})?|Overloaded|ECONNRESET|ETIMEDOUT|ENOTFOUND|fetch failed|Error: connect\b)/i;
+
+function transportErrorOf(text) {
+  const first = String(text || '').split('\n').map((s) => s.trim()).find(Boolean) || '';
+  const m = TRANSPORT_FIRST_LINE.exec(first);
+  if (!m) return null;
+  const status = m[1] ? Number(m[1]) : null;
+  return {
+    reason: first.slice(0, 200),
+    status,
+    // 401/403 will not fix themselves; 429 and 5xx are why the retry exists.
+    retryable: status == null || status === 429 || status >= 500,
+  };
+}
+
 // Malloy text hides under a different key per tool surface.
 const queryTextOf = (input) => {
   if (!input || typeof input !== 'object') return null;
@@ -203,9 +230,17 @@ function ask({ question, model = null, maxTurns = 30, timeoutMs = 300000, cwd = 
       out.latency_ms = latency;
       if (timedOut) out.error = `timed out after ${timeoutMs}ms`;
       else if (code !== 0 && !out.answer) out.error = out.error || `agent exited ${code}: ${stderr.trim().slice(0, 400)}`;
+      const te = transportErrorOf(out.answer);
+      if (te) {
+        out.transport_error = te;
+        out.error = out.error || te.reason;
+      }
       resolve(out);
     });
   });
 }
 
-module.exports = { ask, extract, parseStream, ALLOWED_TOOLS, DISALLOWED_TOOLS, RUN_TOOLS, AGENT_BIN };
+module.exports = {
+  ask, extract, parseStream, transportErrorOf,
+  ALLOWED_TOOLS, DISALLOWED_TOOLS, RUN_TOOLS, AGENT_BIN,
+};
