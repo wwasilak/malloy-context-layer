@@ -11,3 +11,5 @@ comparison) - not routine metric lookups.
 
 | Date | Question | Concepts used | Method | Tier |
 |---|---|---|---|---|
+| 2026-08-04 | Total sales variance between years | kp:TotalSales | YoY change and percentage growth using `lag()` | 2 |
+| 2026-08-04 | Top 5 customers buying bikes | kp:TotalSales, kp:Customer, kp:Product | Drill-down to product category (bikes) and aggregate by customer | 2 |
