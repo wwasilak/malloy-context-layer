@@ -29,10 +29,7 @@
 source: eval_case_runs is duckdb.sql(
   """
   SELECT
-    * EXCLUDE ("case"),
-    -- `case` is a RESERVED WORD in Malloy: `group_by: case` does not parse.
-    -- Renamed once here rather than back-quoted at every call site.
-    "case" AS case_name,
+    * ,
     -- Which results file the row came from. parse_filename rather than a
     -- regex: the backslash escaping needed to match a Windows path survives
     -- neither the Malloy string nor the SQL literal intact, and it fails
@@ -43,10 +40,7 @@ source: eval_case_runs is duckdb.sql(
     -- run inside the selftest lives under selftest/protocol/ and is tagged
     -- 'protocol', because "ran under a swapped CLAUDE.md" is the fact that
     -- decides how to read it.
-    CASE WHEN filename LIKE '%correlation%' THEN 'correlation'
-         WHEN filename LIKE '%protocol%'    THEN 'protocol'
-         WHEN filename LIKE '%selftest%'    THEN 'selftest'
-         ELSE 'sweep' END AS stream
+    
   FROM read_json_auto('evals/results/**/*.jsonl',
     union_by_name = true,
     format = 'newline_delimited',
@@ -58,6 +52,7 @@ source: eval_case_runs is duckdb.sql(
 
    extend {
 
+  rename: case_name is `case`
     
   measure:
     // A run is one (case x run) attempt. Errored case_runs are NOT verdicts
@@ -87,6 +82,13 @@ source: eval_case_runs is duckdb.sql(
     receipts is count() { where: receipt_present }
 
   dimension:
+
+  stream is 
+    pick 'correlation' when filename ~ '%correlation%'
+    pick 'protocol' when filename ~ '%protocol%'
+    pick 'selftest' when filename ~ '%selftest%'
+    else 'sweep'
+
     lane is pick 'tier 1' when tier = 1 pick 'tier 2' when tier = 2 else 'unrecorded'
     verdict is pick 'errored' when errored pick 'pass' when pass else 'fail'
     // `errored` did not exist before EVAL-14, so it is NULL on older rows.
