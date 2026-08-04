@@ -105,6 +105,11 @@ and `kp/` are what gets tested, not a stub.
    standing hints, `models/`, `CLAUDE.md`, the runtime — already has a clean
    measurement on record; `--concurrency <n>` fans runs out after one serial
    run has warmed the shared prompt cache. Neither is on by default.
+7. Reporting is itself a Malloy model (`evals/results.malloy`, SIMP-2) rather
+   than a bespoke differ: DuckDB reads the JSONL natively, so pass rate,
+   flakiness, cost, cache share and flips are measures and views and
+   `report.js` only prints them. The eval history is queryable with the tool
+   under test.
 
 Data: the committed `ParquetFiles/` are the fixture set — hermetic and
 byte-identical in CI. `--live` switches WORKDIR for scheduled drift runs.

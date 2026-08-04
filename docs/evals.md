@@ -27,7 +27,8 @@ npm run eval -- --concurrency 4   # 4 agent calls in flight (first run stays ser
 
 npm run eval:gold                 # (re)compute expect_value from each gold_query
 npm run eval:check                # verify cases parse + gold has not drifted (no agent)
-npm run eval:report               # pass rate by category + flips vs the previous run
+npm run eval:report               # pass rate by case, sweep history, flips
+npm run eval:report -- --view cost_by_case   # any view in evals/results.malloy
 npm run eval:selftest             # does the harness detect what it is for?
 npm run eval:selftest -- --all    # audit EVERY case, not just the two regressions
 npm run eval -- --protocol evals/protocols/stripped-analyst.md --case <name>
@@ -422,13 +423,33 @@ identity. Rows record the verdict and the reason, the answer excerpt, the Malloy
 that actually ran, extracted vs expected value, tokens, cost, latency, turn
 count and whether a provenance receipt was present.
 
-Regressions become a query, which is the point. `npm run eval:report` diffs the
-two most recent runs and prints per-category pass rate, pass→fail flips, and the
-cases that passed some runs but not all.
+Regressions become a query, and since SIMP-2 that is literal: the grouping lives
+in `evals/results.malloy`, a Malloy source over `read_json_auto` of the whole
+results tree, and `report.js` is a printer. `npm run eval:report` prints the
+latest sweep with its provenance, pass rate by case and by category, the flaky
+cases, and any case whose verdict flipped between its own last two sweeps
+(exit 1 on a regression). `--view <name>` prints any other view in the model
+(`by_lane`, `cost_by_case`, `sweeps`, `provenance`, `flips`) as JSON.
 
-Note: a CI run starts from a fresh checkout and so has no previous file to diff
-against — cross-run flip detection needs the results committed or the previous
-artifact downloaded. Locally the diff works as soon as you have two runs.
+The point of the move is that the eval history is now *askable*. Questions like
+"what did each lane cost" or "which sweeps ran at a different semantic identity"
+are views instead of throwaway scripts, and the agent analyses its own eval
+history with the exact tool under test.
+
+Two things to know before writing a view:
+
+- **`case` is a reserved word in Malloy**, so the SQL layer renames it to
+  `case_name` once. `filename=true` is what gives each row its sweep.
+- **Rate views filter to `stream = 'sweep'`.** The glob reads every stream —
+  sweeps, correlation, selftest, stripped-protocol — because that history is
+  worth having, but a stripped-protocol run is *supposed* to fail and a
+  forced-tier correlation run measures the harness. Averaging them into a pass
+  rate reports two experiments as one number. Descriptive views (`sweeps`,
+  `provenance`) deliberately span everything.
+
+Note: flips read from the committed results tree, so a CI run starting from a
+fresh checkout sees only the sweeps that are in the repo — cross-run flip
+detection needs the results committed or the previous artifact downloaded.
 
 ### Stochasticity
 

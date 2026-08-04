@@ -22,7 +22,7 @@ detail on purpose — the reasoning behind them is cited constantly by later wor
 
 ## Status — where we are
 
-**Branch `eval-12-tiering`, 2026-07-31.** Tree clean, all gates green at every
+**Branch `eval-12-tiering`, 2026-08-03.** Tree clean, all gates green at every
 commit. `main` itself carries the whole eval loop: Phase 2 and Phase 2b were
 merged as `838de26`.
 
@@ -34,8 +34,17 @@ merged as `838de26`.
 | `ead4173` | EVAL-12d (the correlation check) + EVAL-14 (transport failures are not verdicts) |
 | `f915fec` | EVAL-12c (the cache we already had, and the premise that said we didn't) |
 | `48e581f` | EVAL-12b (impact selection + concurrency), which closes EVAL-12 |
+| `3f5487c` | SIMP-5 (`--protocol` is a runner flag) + the test that was lying |
+| `35e16fd` | The selftest run that found a case testing nothing |
+| `506b32e` | The selftest audit over every case, which found a second one |
+| `1715961` | EVAL-5: the harvest sources are empty, and that is the finding |
+| `9a37911` | SIMP-2 (`evals/results.malloy`), which closes Phase 2c's opportunistic half |
 
 **EVAL-12 is closed.** All four levers plus the invariant have shipped.
+
+**Phase 2c is closed except for its two trigger-gated items** — SIMP-1's
+deletion (waiting on more tier-1 cases) and SIMP-6 (waiting on case authoring
+becoming the bottleneck). SIMP-2, 3, 4 and 5 have all shipped.
 
 ### Picked up next, in order
 
@@ -57,8 +66,9 @@ an eval case in the same PR.
 work yet; OKF-1 (pin the version) is worth doing on its own whenever, since it is
 half a day and it is what makes the next spec bump detectable at all.
 
-**On trigger only:** Phase 2c (SIMP-2 opportunistic, SIMP-6 when authoring cases
-becomes the bottleneck), Phase 3b and Phase 4.
+**On trigger only:** what is left of Phase 2c (SIMP-1's deletion when most cases
+are tier 1, SIMP-6 when authoring cases becomes the bottleneck), Phase 3b and
+Phase 4.
 
 ### Gates, and how to run them
 
@@ -75,6 +85,9 @@ becomes the bottleneck), Phase 3b and Phase 4.
   (SIMP-5). Swapped in and restored; results go to `evals/results/protocol/`.
 - `npm run eval:correlate` — the cheap-lane validation. Costs 2x the runs of the
   cases it covers, so it rides the schedule, not PRs.
+- `npm run eval:report -- --view <name>` — any view in `evals/results.malloy`
+  (SIMP-2), not just the three the reporter prints by default. Ask the history a
+  question here rather than writing a throwaway script.
 
 There was NO tracked unit test before `352224d`: `porcelainPaths` was exported to
 be testable and its tests were never committed, which is the EVAL-8 lesson twice
@@ -132,9 +145,9 @@ Phase 1 → DONE. Phase 2 (the eval loop) → DONE and running.
 Within Phase 2b: EVAL-7 and EVAL-8 → DONE (the signal-distorting pair;
 measurements from here on are trustworthy). EVAL-9 and EVAL-10 → DONE
 (soundness: no more passing on a number found anywhere, no more cases that
-cannot fail). AGT-3 → DONE. EVAL-11 → DONE, by case conversion. EVAL-13 → 2 of
-3, the third folded into SIMP-2. **Phase 2b is CLOSED** — EVAL-12b was the last
-item in it.
+cannot fail). AGT-3 → DONE. EVAL-11 → DONE, by case conversion. EVAL-13 → 3 of
+3; the third was folded into SIMP-2 and closed with it, by deleting the file
+that held the bug. **Phase 2b is CLOSED** — EVAL-12b was the last item in it.
 
 **Both new cases are validated** — evidence:
 `evals/results/2026-07-29T11-08-29Z.jsonl`. They ran end-to-end through an agent,
@@ -770,7 +783,7 @@ absence of, not to relax the rule.
   never that it skips wrongly. Both live runs confirm it is written, and the
   second one consumed the first one's rows to make a real skip.
 
-### EVAL-13 · Minor harness fixes · 2 of 3 DONE
+### EVAL-13 · Minor harness fixes · DONE
 
 - **`ALLOWED_TOOLS` omitted `mcp__claude_ai_Malloyyo__query`** although `RUN_TOOLS`
   recognises it, so Malloyyo runs would be blocked at the tool gate. **Done**,
@@ -781,8 +794,10 @@ absence of, not to relax the rule.
   suppressed unconditionally under `--live`, including against an explicit
   `--stamp`, and announced in the summary.
 - **`report.js` splits one diagnosis sentence across two `if` chains.**
-  **Deliberately NOT fixed:** SIMP-2 replaces all 157 lines of `report.js` with
-  `evals/results.malloy`. Folded into SIMP-2.
+  **Deliberately NOT fixed; closed by deletion.** SIMP-2 replaced the reporter's
+  grouping and diffing with `evals/results.malloy`, and the two `if` chains went
+  with it. Folding it in was the right call: the fix would have been rewritten
+  three weeks later by the item that removed the file.
 
 ---
 
@@ -845,13 +860,46 @@ against, so deleting it would delete the thing that validates the deletion.
 `extractNumber` can go whenever someone wants, since EVAL-11 left it with zero
 callers. Re-check correlation whenever a case moves to tier 1.
 
-### SIMP-2 · Report in Malloy, not JavaScript · OPEN (opportunistic, small)
+### SIMP-2 · Report in Malloy, not JavaScript · DONE
 
-Results are JSONL; DuckDB reads JSONL natively; we own a semantic layer. Replace
-`report.js` (~150 lines of hand-rolled grouping and diffing) with
-`evals/results.malloy`: measures for pass_rate, flakiness, cost_per_case, flips by
-category. Side effect: the agent can analyse its own eval history with the exact
-tool under test — dogfooding, and one fewer bespoke reporter to maintain.
+Results are JSONL; DuckDB reads JSONL natively; we own a semantic layer. So
+`report.js` (172 lines of hand-rolled grouping and diffing) became
+`evals/results.malloy` plus a 110-line printer with a `--view <name>` escape
+hatch. Measures for pass rate, flakiness, cost, cache share, provenance and
+flips; the side effect was the point as much as the deletion, since the agent
+now analyses its own eval history with the exact tool under test.
+
+**The bigger half was not the deleted lines, it was the duplicated rule.** The
+old reporter re-implemented run.js's quorum, so "what counts as a passing run"
+existed twice and could drift. `passed` and `completed` are defined once now.
+
+**Three bugs found while building it, and all three produced plausible output:**
+
+1. **`errored` did not exist before EVAL-14**, so it is NULL on older rows, and
+   `errored = false` evaluates to NULL — silently dropping those rows from every
+   rate. `aov-synonym` read 11 passed out of 26 runs at a pass_rate of 1.0. The
+   `answered` dimension fixes it: a row that never says it errored, did not.
+   **The old JS reporter had the same hole** — this is a bug the rewrite
+   inherited and then exposed, not one it introduced.
+2. **`flips` as a flat two-stage pipeline** compiles to `LAG(passed) OVER (ORDER
+   BY sweep)` with NO PARTITION BY, so each case's "previous" value was whatever
+   case sorted before it — `membership-verbatim` inherited `aov-synonym`'s.
+   Because the numbers are mostly 3s it read as entirely reasonable. Calculating
+   inside a nest keyed on the case produces the partition; reading the generated
+   SQL was the only way to see it.
+3. **A filename regex failed SILENTLY to an empty string** — the backslash
+   escaping needed for a Windows path survives neither the Malloy string nor the
+   SQL literal. `parse_filename()` has no escapes.
+
+**Scope decision worth keeping:** the glob reads every stream — sweeps,
+correlation, selftest, stripped-protocol — because that history is the most
+interesting thing here. But a pass rate is only meaningful over the main sweep
+stream (a stripped-protocol run is SUPPOSED to fail), so the rate views filter
+to `stream = 'sweep'` and the descriptive ones do not. Verified by checking
+`by_case` was byte-identical before and after widening the glob.
+
+**And the first non-trivial question put to the model corrected this file** —
+see "What live runs cost", which was wrong by 31%.
 
 ### SIMP-3 · One shared Malloy lib · DONE
 
@@ -1397,3 +1445,19 @@ far as it went, and "as far as it went" was the bug.
 **And the corollary about how it was caught:** only a live run could catch it.
 Every unit test agreed with the code, because the code did exactly what the
 tests and the author both believed the rule was.
+
+### An aggregate that looks reasonable is not a checked aggregate
+
+From SIMP-2, four times in one item. A pass_rate of 1.0 over 26 runs, a flip
+count of 3, a sweep name, and a "spent so far" total — every one of them wrong,
+none of them implausible enough to question. Aggregates are the worst place in
+this repo for a bug to live, because the output is a small number that carries
+no evidence of how it was computed, and the reader's only check is whether it
+feels about right.
+
+Two habits follow. **Read the generated SQL when a window function or a NULL is
+anywhere near the answer** — the PARTITION BY bug and the NULL-drop bug were
+both invisible in the Malloy and obvious in the SQL. And **never maintain a
+figure by hand across commits when the rows to compute it are on disk**: the
+$25.55 tally was incremented a dozen times, missed whole streams, and nothing
+was checking it. Cite the query, not the total.

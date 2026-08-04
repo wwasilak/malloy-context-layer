@@ -57,8 +57,11 @@ const view = async (name) => {
     process.exit(1);
   }
 
+  // `sweeps` spans every stream on purpose, so the newest row is often a
+  // selftest or correlation run rather than a sweep. Say which — labelling a
+  // selftest "Latest sweep" invites reading a deliberate failure as a result.
   const [latest] = sweeps;
-  console.log(`Latest sweep: ${latest.sweep}`);
+  console.log(`Latest run: ${latest.sweep} [${latest.stream}]`);
   console.log(`  ${latest.case_runs} run(s), ${latest.passed} passed, ` +
     `${usd(latest.cost)}${latest.never_answered ? `, ${latest.never_answered} never answered` : ''}`);
 
