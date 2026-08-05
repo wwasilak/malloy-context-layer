@@ -1,29 +1,37 @@
-# Knowledge Plane + Malloy
+# Context Layer (Knowledge Plane) + Malloy Semantic Layer (Data Plane)
 
-A working experiment: use a **Malloy** semantic model as the Data Plane and a
-separate, git-versioned **Knowledge Plane** as the meaning layer — business
-concepts, definitions and relationships — linked but never duplicated. The idea
-comes from Juha Korpela's writing on semantic architecture:
+This is an experiment to create working implementation of the idea that comes from uha Korpela's writing on semantic architecture:
 
 - https://commonsensedata.substack.com/p/the-quest-for-semantic-architecture
 - https://commonsensedata.substack.com/p/semantic-linking-the-aboutness-of
 - https://commonsensedata.substack.com/p/semantic-linking-managing-mappings
 - https://commonsensedata.substack.com/p/building-semantics-with-conceptual
 
-## The shape of it
+Context layer (formerly Knowledge Plane - kp) contains the meaning part – business concepts, definitions, relationships, governance. For this part
+Google's Open Knowledge Format is used. As kp can contain hundreds of files, Excel template was also created - it would be used by the Business Users to fill in the concepts and definitions. Python script extracts the data from Excel and converts it to okf bundle.
+
+Semantic layer is implemented via the Malloy language. Malloy models have defined sources, joins, measures, dimensions and views. It allows the agent to perform calculations in a repeatable, accurate way.
+
+Concepts in the context layer are linked to objects in the semantic layer. The relationship between those two layer is one-to-many, so concepts are never duplicated. Links, when a question in natural language is asked, allow the agent to quickly route to apropriate Malloy model. 
+
+
+
+# Elements of the solution
 
 Two artifacts in git, one build command, links between them:
 
-- **`kp/` — the Knowledge Plane**, an [OKF](https://github.com/GoogleCloudPlatform/knowledge-catalog)
+1. **`kp/` — the Knowledge Plane**, an [OKF](https://github.com/GoogleCloudPlatform/knowledge-catalog)
   bundle: one markdown file per concept, YAML frontmatter for identity
   (`uri:`) and governance (`status`, `steward`, …). Folder = tier: `kp/global/`
   is company-wide, the domain folders (`sales/`, `finance/`, `merchandising/`,
   `operations/`) are locally stewarded. Hand-edited, reviewed by PR.
-- **`models/` — the Malloy models**, the Data Plane. `base.malloy` holds all the
+
+2. **`models/` — the Malloy models**, the Data Plane. `base.malloy` holds all the
   plumbing (sources, in-context sources, universal measures); the thin
   department models `import "base.malloy"` and extend it. Fields link to a
   concept with a `# concept = "kp:..."` annotation, so meaning lives in one place.
-- **`build.js` — the link.** It validates the bundle, compiles every model,
+
+3. **`build.js` — the link.** It validates the bundle, compiles every model,
   checks every annotation resolves to a real concept (and every
   `preferred_source` to a real source), then **writes the mapping back** into the
   bundle: each concept's `## Implementations` table and the root
@@ -31,7 +39,7 @@ Two artifacts in git, one build command, links between them:
   definition · binding) plus data coverage and sanctioned views. There is no
   separate map file; **the bundle is the agent context.**
 
-- **`evals/` — the proof.** The build shows the plane is *consistent*; the eval
+4. **`evals/` — the proof.** The build shows the plane is *consistent*; the eval
   loop shows the agent actually *uses* it: routes to the right concept, applies
   membership rules verbatim, refuses ungoverned terms, and does not quietly
   re-derive a governed measure from raw columns. Cases live in
@@ -41,6 +49,8 @@ Two artifacts in git, one build command, links between them:
 The result is an executable model that is also its own conceptual documentation,
 and a routing table an AI agent uses to answer questions from governed
 definitions rather than improvised SQL.
+
+
 
 ## Getting started
 
