@@ -19,6 +19,7 @@ const path = require('path');
 const okf = require('./okf-lib');
 const mal = require('./malloy-lib');
 const { checkGold } = require('./evals/lib/goldcheck');
+const evalMal = require('./evals/lib/malloy');
 
 const KP_DIR     = process.env.KP_DIR     || 'kp';
 const MODELS_DIR = mal.MODELS_DIR;
@@ -212,18 +213,21 @@ async function compileModel(filePath) {
     }
   warnings.length && console.warn(warnings.filter(w => w.startsWith('[coverage]')).map(w => '  WARN ' + w).join('\n'));
 
+  // The source index (source name -> defining/exposing model file) is
+  // assembled from the compile we already did rather than compiling every
+  // model a second time. Shared by the eval-case check and the examples check
+  // below, both of which need to know which model file runs a given source.
+  const index = { defines: {}, exposes: {} };
+  for (const m of models) {
+    for (const src of Object.keys(m.sources)) if (!index.defines[src]) index.defines[src] = m.filePath;
+    for (const src of (m.exposes || [])) (index.exposes[src] ||= []).push(m.filePath);
+  }
+
   // 5b. tier-0 eval checks (SIMP-4). Every eval case parses, every gold_query
   //     still runs, no committed gold value has drifted. No LLM is involved, so
   //     this is validation like everything above it — and it gates PRs here
   //     instead of in a second workflow that has to be remembered.
-  //     The source index is assembled from the compile we already did rather
-  //     than compiling every model a second time.
   {
-    const index = { defines: {}, exposes: {} };
-    for (const m of models) {
-      for (const src of Object.keys(m.sources)) if (!index.defines[src]) index.defines[src] = m.filePath;
-      for (const src of (m.exposes || [])) (index.exposes[src] ||= []).push(m.filePath);
-    }
     const { lines, problems } = await checkGold({ workdir: WORKDIR, index });
     lines.forEach(l => console.log('  ' + l));
     if (problems.length) {
@@ -232,6 +236,38 @@ async function compileModel(filePath) {
       process.exit(1);
     }
     console.log(`Eval cases (tier 0): ${lines.length} checked, gold current`);
+  }
+
+  // 5c. kp/agent/examples.md must actually run. CLAUDE.md tells every agent to
+  //     copy these shapes verbatim and to compile a new example before adding
+  //     it — a snippet that silently stops compiling (a renamed field, a join
+  //     alias that moved) teaches every future session the wrong syntax with
+  //     nothing to catch it until an agent hits the error live. Same discipline
+  //     as the gold queries above: run each ```malloy fence, fail the build if
+  //     one doesn't.
+  {
+    const examplesPath = path.join(KP_DIR, 'agent', 'examples.md');
+    if (fs.existsSync(examplesPath)) {
+      const text = fs.readFileSync(examplesPath, 'utf8');
+      const blocks = [...text.matchAll(/```malloy\n([\s\S]*?)```/g)].map(m => m[1]);
+      const exampleProblems = [];
+      for (const [i, block] of blocks.entries()) {
+        try {
+          await evalMal.runQuery(block, { workdir: WORKDIR, index, rowLimit: 1 });
+        } catch (e) {
+          const firstLine = block.trim().split('\n')[0];
+          exampleProblems.push(`block ${i + 1} (${firstLine} ...): ${e.message || e}`);
+        }
+      }
+      if (exampleProblems.length) {
+        console.error('\nBUILD FAILED — kp/agent/examples.md has a snippet that does not run:');
+        exampleProblems.forEach(p => console.error('  ' + p));
+        process.exit(1);
+      }
+      console.log(`Examples (kp/agent/examples.md): ${blocks.length} snippet(s) compiled and ran`);
+    } else {
+      console.warn('  WARN kp/agent/examples.md not found — skipping examples check');
+    }
   }
 
   // 6. write everything back into the bundle (the bundle IS the agent context)

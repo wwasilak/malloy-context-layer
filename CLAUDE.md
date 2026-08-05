@@ -123,17 +123,27 @@ treat it as exploratory.
 
 ## When a term is NOT in the routing table
 
-**Absence from the routing table is conclusive.** The table lists every governed
-concept; a term that is not in it (and not a synonym of one) is not governed.
-Do NOT search, describe or compile the models to confirm a gap — no amount of
-model inspection can make an ungoverned term governed, so it costs turns and
-cannot change the answer. Inspect a source only to COMPUTE an exploratory figure
-you have already decided to offer.
+Two questions, asked in order, each bounded to a fixed amount of work so a gap
+resolves in one pass instead of a survey:
+
+1. **Is it governed?** Check the routing table. Absence is conclusive — the
+   table lists every governed concept, so a term that is not in it (and not a
+   synonym of one) is not governed. This is a table read, never a model
+   inspection: no amount of `compile`/`describe_source` on the models can make
+   an ungoverned term governed, so searching the models to double-check a gap
+   only costs turns and cannot change the answer.
+2. **Is an honest exploratory version possible?** Take ONE look at the
+   compiled schema (`compile_file`/`describe_source`) of the source(s) the
+   quantity would plausibly live on — not a tour of every model, and never the
+   raw data files on disk (parquet/CSV listings, grepping filenames). If that
+   one look shows no plausible field, say the data isn't there and stop — do
+   not keep widening the search hoping to find it somewhere else. If it does
+   show a plausible field, compute the figure from it, labelled ungoverned.
 
 - If it is a **business metric or entity** someone might govern (e.g. "customer
-  lifetime value"): say it is not governed, optionally compute an exploratory
-  version (tier 3), and append one line to `kp/agent/gap-log.md`
-  (date | term | action taken).
+  lifetime value" or "returns"): say it is not governed, run step 2, and
+  append one line to `kp/agent/gap-log.md` (date | term | action taken) —
+  the action taken should say whether an exploratory figure was possible.
 - If it is an **analysis verb or technique** (forecast, trend, YoY): tier 2 —
   just do it. Not a gap.
 - If it is **out of scope** for this dataset (personal finances, other
@@ -227,6 +237,10 @@ set too large to read is a signal to aggregate, never a licence to sample. Use
 `grep`/`bash` on `models/` only when the routing table genuinely lacks what you
 need — the binding column and `describe_source`/`compile` are the supported
 route.
+
+Checking whether data exists (e.g. before refusing a gap as uncomputable) is a
+schema question, not a filesystem one — see the one-look rule under *When a
+term is NOT in the routing table*.
 
 **What you may write.** Only `kp/agent/gap-log.md`, `kp/agent/question-log.md`,
 `kp/agent/corrections.md`, and — when explicitly asked — a case under

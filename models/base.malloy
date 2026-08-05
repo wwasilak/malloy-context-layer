@@ -19,16 +19,16 @@ given:
 # concept = "kp:CurrencyExchangeRate"
 source: currency_exchange_rate is duckdb.table('ParquetFiles/currencyexchange.parquet')
   include {
-    internal: FromCurrency, ToCurrency, `Date`
-    public: Exchange
+    public: FromCurrency, ToCurrency, `Date`
+     Exchange
   }
 
 // ---------- CUSTOMER ----------
 # concept = "kp:Customer"
 source: customer is duckdb.table('ParquetFiles/customer.parquet')
   include {
-    internal:  GeoAreaKey
-    public:
+    public:  GeoAreaKey
+    
     # concept = "kp:CustomerAge"
     Age
     # concept = "kp:CustomerGender"
@@ -52,8 +52,8 @@ source: customer is duckdb.table('ParquetFiles/customer.parquet')
 # concept = "kp:CalendarDate"
 source: calendar_date is duckdb.table('ParquetFiles/date.parquet')
   include {
-    internal: DateKey
-    public:
+    public: DateKey
+
     `Date`, DayofWeek, DayofWeekNumber, DayofWeekShort, `Month`, MonthNumber,
     MonthShort, `Quarter`, WorkingDay, WorkingDayNumber, `Year`, YearMonth,
     YearMonthNumber, YearMonthShort, YearQuarter, YearQuarterNumber
@@ -66,8 +66,9 @@ source: calendar_date is duckdb.table('ParquetFiles/date.parquet')
 # concept = "kp:Store"
 source: store is duckdb.table('ParquetFiles/store.parquet')
   include {
-    internal: StoreKey, GeoAreaKey
-    public:
+    public: 
+    StoreKey, GeoAreaKey
+    
     # concept = "kp:StoreCountry"
     CountryName
 
@@ -82,8 +83,8 @@ source: store is duckdb.table('ParquetFiles/store.parquet')
 # concept = "kp:Product"
 source: product is duckdb.table('ParquetFiles/product.parquet')
   include {
-    internal: ProductKey, CategoryKey, SubCategoryKey
-    public:
+     public: ProductKey, CategoryKey, SubCategoryKey
+    
     # concept = "kp:ProductBrand"
     Brand
     # concept = "kp:ProductCategory"
@@ -104,8 +105,8 @@ source: product is duckdb.table('ParquetFiles/product.parquet')
 # concept = "kp:OrderLine"
 source: order_line is duckdb.table('ParquetFiles/orderrows.parquet')
   include {
-    internal: OrderKey, ProductKey, RowNumber, UnitPrice
-    public:
+    public: OrderKey, ProductKey, RowNumber, UnitPrice
+    
     # concept = "kp:LineQuantity"
     Quantity
 
@@ -116,8 +117,8 @@ source: order_line is duckdb.table('ParquetFiles/orderrows.parquet')
 # concept = "kp:Order"
 source: order is duckdb.table('ParquetFiles/orders.parquet')
   include {
-    internal: OrderKey, StoreKey
-    public:
+    public: OrderKey, StoreKey
+    
     # concept = "kp:OrderDate"
     DT
 

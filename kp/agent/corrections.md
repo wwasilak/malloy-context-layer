@@ -62,3 +62,35 @@ reports the ungoverned basis and shows what matched. See `kp/agent/gap-log.md`.
   runner (`membership-verbatim`, graded on method for this reason); a fix
   changes a governed membership rule and needs a steward PR against
   `kp/sales/active-customer.md` + `models/base.malloy`.
+
+These are read before answering, which is the point: each one changes what
+the next agent does on a question it has not seen yet.
+
+- **`kp:StoreCountry` is not a place for Online orders.** `store.CountryName`
+  doubles as the discriminator `kp:SalesChannel` is derived from —
+  `CountryName='Online'` is a channel, not a country — so store country carries
+  no geography for Online orders and cannot restrict them to a region. Use
+  `kp:CustomerCountry` (residency) for region work; it covers both channels, and
+  on Physical store it reproduces `kp:StoreCountry` totals exactly (verified
+  2026-08-05: US $711,444,432.44 both ways). *Proposed caveat for the steward of
+  `kp:StoreCountry` (Retail Operations).*
+
+- **RESOLVED 2026-08-05 — `OrderKey` was internal, blocking per-order
+  distributions.** `order`/`sales_order`/`finance_order` used to mark
+  `OrderKey` (and several other keys) `internal`, so no query could
+  `group_by: OrderKey` to get one row per order — any "how many ORDERS fall
+  into band X" question (discount rate, order value, ...) was not computable
+  at order grain. The steward changed every `internal:` field in
+  `base.malloy` to `public:` the same day; `group_by: OrderKey` and the
+  two-stage per-order pipeline (group by key -> band the per-row measure ->
+  count) now compile and the totals reconcile against `kp:OrderCount` (e.g.
+  2015: 6,443+18,012+9,125 = 33,580). Note the fix was broader than `OrderKey`
+  alone — `StoreKey`, `ProductKey`, `CategoryKey`, `RowNumber`, `UnitPrice`,
+  `GeoAreaKey`, `DateKey` etc. are now all public too; no problem has
+  surfaced from that yet, but it's a wider surface than this one question
+  needed, worth the steward's eyes if it wasn't intentional.
+
+- **Name-pattern filters need their matches shown.** `~ '%ike%'` for "bike" swept
+  in seven SLR-like cameras carrying 96% of the revenue. Any name match standing
+  in for a category must be `group_by`-ed and displayed before the figure is
+  reported. *General; no single concept owns it.*
