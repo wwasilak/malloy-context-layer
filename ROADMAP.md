@@ -62,9 +62,9 @@ INT-3a or INT-3b with INT-6.
 **Continuously:** EVAL-5 harvesting toward ~30 cases; every correction filed gets
 an eval case in the same PR.
 
-**Newly queued:** Phase 2d, the OKF spec upgrade. Not scheduled against the EVAL
-work yet; OKF-1 (pin the version) is worth doing on its own whenever, since it is
-half a day and it is what makes the next spec bump detectable at all.
+**Phase 2d is DONE (2026-08-06, branch `okf-2.0`)** — format-only OKF v0.2
+adoption. See its section for the full record; §10 Attested Computation is
+deferred to its own future phase, not folded into this one.
 
 **On trigger only:** what is left of Phase 2c (SIMP-1's deletion when most cases
 are tier 1, SIMP-6 when authoring cases becomes the bottleneck), Phase 3b and
@@ -1128,67 +1128,92 @@ membership rules, the two known regressions.
 
 *Triggered: a new Open Knowledge Format spec was published.*
 
-**Status: not started.** Raised 2026-07-29 so it is not forgotten.
+**Status: DONE (format-only scope), 2026-08-06.** `SPEC.md` (OKF v0.2) landed
+in the repo at `299885f`; OKF-1 through OKF-5 shipped in the same pass on
+branch `okf-2.0`.
 
-**Open question for whoever picks this up — the spec version and its published
-location were not recorded when this was raised.** Get those first; everything
-below is scoped from the CURRENT repo, not from the new spec, and the delta is
-guesswork until someone reads it.
+**Scope decision made at the start of this pass, not re-litigated per file:**
+adopt the v0.2 provenance/trust/lifecycle families (`generated`, `verified`,
+`status: draft|stable|deprecated`) and move the governance gate from
+`status: approved` onto `status: stable` + a human `verified` entry. Do NOT
+build §10 Attested Computation (real executor/attester attestation for
+measures) in this pass — that is real, separate design work (a Malloy
+executor/attester pair, eval-grading changes) and is queued as its own
+future phase below, not mixed into a format migration.
 
-### OKF-1 · Pin the version we claim to conform to · 0.5 day
+### OKF-1 · Pin the version we claim to conform to · 0.5 day · DONE
 
-`kp/bundle.yaml` today is two lines — `namespace` and `temporal_anchor` — and
-declares **no OKF version at all**. So there is no mechanical way to know which
-spec the bundle targets, and no way for a build to notice it has drifted from one.
-Add an explicit `okf_version:` (or whatever the new spec names it) and have
-`okf-lib.js` assert it.
+`kp/bundle.yaml` gained `okf_version: "0.2"`; `okf-lib.js` asserts it on load
+and stamps it as frontmatter on the generated root `index.md` (SPEC.md §12 —
+the only place frontmatter is permitted in an `index.md`).
 
-**Do this FIRST:** it is the check that makes every later spec bump detectable
-instead of archaeological.
+### OKF-2 · Read the new spec and diff it against the bundle · DONE
 
-### OKF-2 · Read the new spec and diff it against the bundle · 0.5-1 day
+Delta table produced before any file was touched (as instructed). Straightforward,
+no-decision items: `# Citations` → `sources` (moot, none exist yet); `uri:`,
+`relationships:`, `of:`, `subtype_of:`, `preferred_source:`, `allowed_roles:`,
+`synonyms:`, `steward:` all kept as producer extensions (SPEC.md §4.1 permits
+arbitrary extension keys; the spec's own concept-ID-by-path and prose-only
+relationships would have thrown away path-independent identity and the
+validated conceptual graph for no conformance gain). Real forks, resolved by
+the operator before OKF-3 ran: (1) format-only vs. also building Attested
+Computation this pass → format-only; (2) `status: approved` kept as our own
+value vs. renamed to `stable` with the gate moved to `verified` → renamed,
+gate moved; (3) how to backfill `generated.by` given no prior per-file
+authorship record → `human:<steward>`, `human:global` where there is no
+steward. Verified before backfilling: `approved_by` equalled `steward` on
+every one of the 34 files that carried it (0 mismatches) — the same actor
+derivation was safe to apply to all 55 concepts, not just the ones with an
+explicit `approved_by`.
 
-Produce a written delta before changing anything: which frontmatter fields are
-added, renamed, retyped or removed; whether folder tiering (`global/` vs domain)
-still maps; whether `type`/`kind`, `status`, `preferred_source`, `allowed_roles`,
-`last_validated` and the relationship model still mean what we use them to mean.
+### OKF-3 · Migrate the bundle · DONE
 
-Output is a table of concept-file changes required, not a patch.
+`migrate-okf-02.js` (repo root, re-runnable, idempotent — skips a file that
+already has `generated:`): `timestamp` → `generated: { by, at }`; on a concept
+that was `approved`, adds `verified: { by, at }` (same actor/date — see OKF-2),
+removes `approved_by`, renames `status: approved` → `stable`, drops the
+redundant `approved` echo from `tags:`. All 55 concepts + 4 templates + the
+`CLAUDE.md` GOV-1 profile migrated; `kp/agent/*.md` operational docs and eval
+case files needed no changes (minimal frontmatter, no status/timestamp
+fields). Relationships kept as-is (extension, not a spec concern — see OKF-2).
 
-### OKF-3 · Migrate the bundle · 1-2 days
+### OKF-4 · Update the writers and validators · DONE
 
-55 concepts + 6 relationships + `_templates/` + the operational docs under
-`kp/agent/`. Mechanical where the delta is a rename; a decision where the spec adds
-something we have been encoding by convention.
+`okf-lib.js`: loader now parses `generated`/`verified`, computes a trust tier
+(SPEC.md §5.3) and a `governed` boolean (`status: stable` AND a `human:`
+`verified` entry — the two lifecycle/trust axes collapsed into the one thing
+the agent and the build actually need); root routing table gained a Verified
+column. `build.js`: both hardcoded `status !== 'approved'` gates now read
+`governed`. `CLAUDE.md`, `ARCHITECTURE.md`, `docs/steward-onboarding.md`,
+`README.md` updated to the new vocabulary and gate. `excel_to_okf.py` /
+`okf_to_excel.py`: `STATUS_MAP`/`STATUS_OUT` retarget `approved`→`stable`,
+`In review` retired (no v0.2 equivalent — falls back to `draft` with a
+warning, was previously silently accepted); both directions now round-trip
+`generated`/`verified` instead of `approved_by`/`timestamp`. `make_viz.py`
+needed no change (doesn't key off these fields).
 
-**Write it as a migration script, not by hand** — the same discipline as
-`excel_to_okf.py`, and it keeps a rerun possible when the spec moves again.
+### OKF-5 · Re-validate, and prove nothing moved · DONE
 
-### OKF-4 · Update the writers and validators · 1 day
+`npm test` (89/89, one self-protective skip mid-edit) → `npm run build` (clean
+tree, 0 concept files touched by write-back) → `npm run eval:check` (7/7 tier-0
+checks, gold current) all green. Live half: a full before/after sweep was not
+run (cost/scope call — see the conversation that shipped this); instead, the
+cheap tier-1 probe ran post-migration against the working `CLAUDE.md` + `kp/`:
+`refusal-routing-decision` (the case that specifically exercises the reworded
+governance-gate language and the new Verified column) passed 3/3 clean, 0
+Malloy calls. `aov-synonym` scored 5/6 across two runs; the one miss was a
+tier-1 repair-turn narration artifact (the executed query and result were
+exact-match correct — the agent's blind repair-turn text just didn't restate
+the receipt) unrelated to anything this migration touched, confirmed by a
+clean solo rerun. No verdict flipped from what the format previously produced.
 
-`okf-lib.js` (loader + `writeBack`), `build.js` (validation + routing-table
-generation), `excel_to_okf.py` / `okf_to_excel.py` (archived but still the OPT-6
-revival path), `make_viz.py`, and `kp/_templates/`.
-
-The routing table is GENERATED, so a frontmatter change ripples into `kp/index.md`
-and every domain index automatically — but only if the generator knows about it.
-
-### OKF-5 · Re-validate, and prove nothing moved · 0.5 day
-
-`npm test` → `npm run build` (tree must stay clean) → `npm run eval:check`.
-
-Then the part that actually matters: **`semantic_identity` will change**, because
-`treeDigest` covers all of `kp/`, so an eval sweep after the migration will report
-"the MEANING moved" (EVAL-6/EVAL-8). Run a sweep BEFORE and AFTER and compare
-verdicts case by case — a pure format migration must not flip a single one. If it
-does, the migration changed meaning, which is the whole risk.
-
-**Why this is not just chores.** The KP's value proposition is that a definition is
-governed and stable. A format migration is the one operation that can quietly
-change what a definition MEANS while every gate stays green — the gates check
-internal consistency, not fidelity to the previous semantics. The sweep comparison
-in OKF-5 is the only thing that would catch it, which is a good argument for
-getting more cases committed (EVAL-5) before starting.
+**Deferred, not forgotten:** §10 Attested Computation for measures (real
+executor/attester attestation, replacing the honor-system binding table) is
+real design work, queued as its own future phase — see the scope decision
+above. `kp/agent/evals/*.md` and `evals/lib/*.js` still say "approved" in a
+few historical narrative comments (SIMP-4/SIMP-5 write-ups) — left as-is
+deliberately, since those describe what was true when they were written, not
+the current vocabulary.
 
 ---
 

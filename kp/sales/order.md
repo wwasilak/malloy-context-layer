@@ -18,10 +18,10 @@ relationships:
   - uri: kp:occursOn
     verb: "occurs on"
     range: kp:CalendarDate
-tags: [Sales, approved]
-status: approved
-approved_by: Sales
-timestamp: 2026-07-15
+tags: [Sales]
+status: stable
+generated: { by: human:sales, at: 2026-07-15T00:00:00Z }
+verified: { by: human:sales, at: 2026-07-15T00:00:00Z }
 ---
 
 # Order

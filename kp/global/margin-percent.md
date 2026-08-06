@@ -3,9 +3,10 @@ uri: kp:MarginPercent
 type: measure
 title: "Margin Percent"
 description: "Gross margin expressed as a ratio of total sales."
-tags: [global, approved]
-status: approved
-timestamp: 2026-07-15
+tags: [global]
+status: stable
+generated: { by: human:global, at: 2026-07-15T00:00:00Z }
+verified: { by: human:global, at: 2026-07-15T00:00:00Z }
 last_validated: 2026-07-28
 ---
 

@@ -3,9 +3,10 @@ uri: kp:LineCost
 type: measure
 title: "Line Cost"
 description: "Cost of goods sold for one order line: quantity times unit cost."
-tags: [global, approved]
-status: approved
-timestamp: 2026-07-15
+tags: [global]
+status: stable
+generated: { by: human:global, at: 2026-07-15T00:00:00Z }
+verified: { by: human:global, at: 2026-07-15T00:00:00Z }
 ---
 
 # Line Cost

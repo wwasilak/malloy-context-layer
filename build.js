@@ -107,8 +107,8 @@ async function compileModel(filePath) {
       for (const fc of s.fieldConcepts) used.add(fc.concept);
       for (const u of used) {
         if (!canon[u]) errors.push(`[${m.model}] concept not in KP: ${u} (source ${srcName})`);
-        else if (canon[u].status !== 'approved')
-          warnings.push(`[${m.model}] ${srcName} references '${u}' with status '${canon[u].status}' — excluded from agent map`);
+        else if (!canon[u].governed)
+          warnings.push(`[${m.model}] ${srcName} references '${u}' (status '${canon[u].status}', trust '${canon[u].trust_tier}') — not governed, excluded from agent map`);
       }
       for (const r of s.joinRoles)
         if (!rels[r]) errors.push(`[${m.model}] relationship not in KP: ${r} (source ${srcName})`);
@@ -193,16 +193,17 @@ async function compileModel(filePath) {
   }
 
   // 5. coverage checks
-  // An APPROVED concept with no implementation is a governed definition the
-  // agent can route to and then cannot answer from — the routing table promises
-  // a binding that does not exist. That is an error, not a warning (SIMP-4,
-  // tier 0). Drafts are exempt: unbuilt is the normal state of a draft.
+  // A GOVERNED concept (status: stable + human-verified) with no implementation
+  // is a definition the agent can route to and then cannot answer from — the
+  // routing table promises a binding that does not exist. That is an error, not
+  // a warning (SIMP-4, tier 0). Drafts and unverified concepts are exempt:
+  // unbuilt is the normal state of something not yet governed.
   const unbuilt = Object.entries(canon)
-    .filter(([uri, c]) => c.status === 'approved' && !touch[uri])
+    .filter(([uri, c]) => c.governed && !touch[uri])
     .map(([uri]) => uri);
   if (unbuilt.length) {
-    console.error('\nBUILD FAILED — approved concepts with no implementation:');
-    unbuilt.forEach(u => console.error(`  ${u} — no model implements it (bind it, or set status: draft)`));
+    console.error('\nBUILD FAILED — governed concepts with no implementation:');
+    unbuilt.forEach(u => console.error(`  ${u} — no model implements it (bind it, or set status: draft / remove verified)`));
     process.exit(1);
   }
   for (const m of models)

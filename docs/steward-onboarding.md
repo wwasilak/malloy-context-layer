@@ -31,7 +31,7 @@ copied into a model.
 3. **Fill in the frontmatter** (fields below). Write the `description` as a
    business definition — what it *means*, not how it's computed.
 4. **Open a PR.** CI runs the build. Green = your concept is valid and, once
-   `status: approved`, the agent can route to it. Merge.
+   `status: stable` with a `verified` sign-off, the agent can route to it. Merge.
 
 Binding to real data (which model/source/field implements the concept) is done
 by a developer in the Malloy model and filled into your file's
@@ -48,14 +48,15 @@ Required:
 | `type` | `entity` \| `measure` \| `attribute` \| `defined_class`. |
 | `title` | Human label, e.g. "Total Sales". |
 | `description` | One-sentence business definition. |
-| `status` | `draft` → `in_review` → `approved` → `deprecated`. **Only `approved` reaches the agent.** |
+| `status` | `draft` → `stable` → `deprecated` (OKF v0.2 lifecycle — is the content finished, not who trusts it). |
 
 Common / conditional:
 
 | Field | When |
 |---|---|
 | `steward` | Who owns it. Required for domain concepts; omit for `global/`. |
-| `approved_by` | Who signed off (role or name). |
+| `generated` | `{ by: human:<id>, at: <ISO datetime> }` — who/when authored the current content. |
+| `verified` | `{ by: human:<id>, at: <ISO datetime> }` (or a list) — who confirmed it against policy. **This is the governance gate**, not `status`: the agent only routes to a concept that is `status: stable` AND has a `human:` `verified` entry. Add it on steward sign-off. |
 | `synonyms` | Other terms people use for it — helps the agent resolve questions. |
 | `of` | For an `attribute`: the entity it hangs off (e.g. `kp:Customer`). |
 | `subtype_of` | This concept specialises another (must be a real `uri`). |
@@ -63,7 +64,7 @@ Common / conditional:
 | `preferred_source` | Default `model.source` when several models carry the concept. |
 | `allowed_roles` | Restrict who may see the figures. |
 | `last_validated` | Stamped by the eval runner — **do not hand-edit.** |
-| `tags`, `timestamp` | Labels; date of last meaningful change. |
+| `tags` | Free-form labels. |
 
 ## Editing an existing concept
 
@@ -95,9 +96,10 @@ named file and re-run:
 - **`preferred_source ... not found`** — the `model.source` you named doesn't
   exist. Check the value with a developer.
 
-Warnings (build still passes, but worth acting on): `approved but unbuilt`
-(nothing implements this approved concept yet) and `built but ungoverned` (a
-model field has no concept — a governance gap).
+`governed concepts with no implementation` is a hard failure (not a warning):
+a `status: stable` + `verified` concept the agent could route to and then not
+answer from. `built but ungoverned` (a model field has no concept — a
+governance gap) is a warning; worth acting on but doesn't block the build.
 
 ## Not comfortable in markdown?
 

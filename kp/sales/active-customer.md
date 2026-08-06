@@ -6,10 +6,10 @@ description: "A customer with at least one order in the last 2 years."
 steward: Sales
 subtype_of: kp:Customer
 membership_rule: "made_an_order count > 0 within last 2 years"
-tags: [Sales, approved]
-status: approved
-approved_by: Sales
-timestamp: 2026-07-15
+tags: [Sales]
+status: stable
+generated: { by: human:sales, at: 2026-07-15T00:00:00Z }
+verified: { by: human:sales, at: 2026-07-15T00:00:00Z }
 last_validated: 2026-07-28
 ---
 

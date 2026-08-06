@@ -3,24 +3,24 @@
 
 | Concept | Kind | Status | Definition |
 |---|---|---|---|
-| [Line Cost](./line-cost.md) `kp:LineCost` | measure | approved | Cost of goods sold for one order line: quantity times unit cost. |
-| [Line Discount](./line-discount.md) `kp:LineDiscount` | measure | approved | Discount given on one order line: quantity times (list price minus net price). |
-| [Line List Revenue](./line-list-revenue.md) `kp:LineListRevenue` | measure | approved | Revenue for one order line valued at list price (before discount): quantity times unit list price. |
-| [Line Revenue](./line-revenue.md) `kp:LineRevenue` | measure | approved | Gross revenue for one order line: quantity times net price. |
-| [Margin](./margin.md) `kp:Margin` | measure | approved | Gross margin: total sales minus total cost. |
-| [Margin Percent](./margin-percent.md) `kp:MarginPercent` | measure | approved | Gross margin expressed as a ratio of total sales. |
-| [Order Count](./order-count.md) `kp:OrderCount` | measure | approved | Number of distinct orders in scope. |
-| [Total Cost](./total-cost.md) `kp:TotalCost` | measure | approved | Sum of line cost across all order lines in scope. |
-| [Total Sales](./total-sales.md) `kp:TotalSales` | measure | approved | Sum of line revenue across all order lines in scope. |
-| [Customer Age](./customer-age.md) `kp:CustomerAge` | attribute | approved | Age of the customer in years. |
-| [Customer City](./customer-city.md) `kp:CustomerCity` | attribute | approved | City of residence of the customer. |
-| [Customer Country](./customer-country.md) `kp:CustomerCountry` | attribute | approved | Country of residence of the customer. |
-| [Customer Gender](./customer-gender.md) `kp:CustomerGender` | attribute | approved | Gender of the customer. |
-| [Customer Occupation](./customer-occupation.md) `kp:CustomerOccupation` | attribute | approved | Stated occupation of the customer. |
-| [Line Quantity](./line-quantity.md) `kp:LineQuantity` | attribute | approved | Number of product units on the order line. |
-| [Order Date](./order-date.md) `kp:OrderDate` | attribute | approved | The calendar date on which the order was placed. |
-| [Product Brand](./product-brand.md) `kp:ProductBrand` | attribute | approved | Brand under which the product is sold. |
-| [Product Category](./product-category.md) `kp:ProductCategory` | attribute | approved | Top-level merchandising category of the product. |
-| [Product Unit Cost](./product-unit-cost.md) `kp:ProductUnitCost` | attribute | approved | Cost to the company of one unit of the product. |
-| [Product Unit Price](./product-unit-price.md) `kp:ProductUnitPrice` | attribute | approved | List selling price of one unit of the product. |
-| [Store Country](./store-country.md) `kp:StoreCountry` | attribute | approved | Country in which the store operates. |
+| [Line Cost](./line-cost.md) `kp:LineCost` | measure | stable | Cost of goods sold for one order line: quantity times unit cost. |
+| [Line Discount](./line-discount.md) `kp:LineDiscount` | measure | stable | Discount given on one order line: quantity times (list price minus net price). |
+| [Line List Revenue](./line-list-revenue.md) `kp:LineListRevenue` | measure | stable | Revenue for one order line valued at list price (before discount): quantity times unit list price. |
+| [Line Revenue](./line-revenue.md) `kp:LineRevenue` | measure | stable | Gross revenue for one order line: quantity times net price. |
+| [Margin](./margin.md) `kp:Margin` | measure | stable | Gross margin: total sales minus total cost. |
+| [Margin Percent](./margin-percent.md) `kp:MarginPercent` | measure | stable | Gross margin expressed as a ratio of total sales. |
+| [Order Count](./order-count.md) `kp:OrderCount` | measure | stable | Number of distinct orders in scope. |
+| [Total Cost](./total-cost.md) `kp:TotalCost` | measure | stable | Sum of line cost across all order lines in scope. |
+| [Total Sales](./total-sales.md) `kp:TotalSales` | measure | stable | Sum of line revenue across all order lines in scope. |
+| [Customer Age](./customer-age.md) `kp:CustomerAge` | attribute | stable | Age of the customer in years. |
+| [Customer City](./customer-city.md) `kp:CustomerCity` | attribute | stable | City of residence of the customer. |
+| [Customer Country](./customer-country.md) `kp:CustomerCountry` | attribute | stable | Country of residence of the customer. |
+| [Customer Gender](./customer-gender.md) `kp:CustomerGender` | attribute | stable | Gender of the customer. |
+| [Customer Occupation](./customer-occupation.md) `kp:CustomerOccupation` | attribute | stable | Stated occupation of the customer. |
+| [Line Quantity](./line-quantity.md) `kp:LineQuantity` | attribute | stable | Number of product units on the order line. |
+| [Order Date](./order-date.md) `kp:OrderDate` | attribute | stable | The calendar date on which the order was placed. |
+| [Product Brand](./product-brand.md) `kp:ProductBrand` | attribute | stable | Brand under which the product is sold. |
+| [Product Category](./product-category.md) `kp:ProductCategory` | attribute | stable | Top-level merchandising category of the product. |
+| [Product Unit Cost](./product-unit-cost.md) `kp:ProductUnitCost` | attribute | stable | Cost to the company of one unit of the product. |
+| [Product Unit Price](./product-unit-price.md) `kp:ProductUnitPrice` | attribute | stable | List selling price of one unit of the product. |
+| [Store Country](./store-country.md) `kp:StoreCountry` | attribute | stable | Country in which the store operates. |

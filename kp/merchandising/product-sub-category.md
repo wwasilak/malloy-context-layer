@@ -5,10 +5,10 @@ title: "Product Sub-Category"
 description: "Merchandising sub-category of the product, below its top-level category."
 steward: Merchandising
 of: kp:Product
-tags: [Merchandising, approved]
-status: approved
-approved_by: Merchandising
-timestamp: 2026-07-15
+tags: [Merchandising]
+status: stable
+generated: { by: human:merchandising, at: 2026-07-15T00:00:00Z }
+verified: { by: human:merchandising, at: 2026-07-15T00:00:00Z }
 ---
 
 # Product Sub-Category

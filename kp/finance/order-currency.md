@@ -5,10 +5,10 @@ title: "Order Currency"
 description: "The original transaction currency in which an order was placed."
 steward: Finance
 of: kp:Order
-tags: [Finance, approved]
-status: approved
-approved_by: Finance
-timestamp: 2026-07-15
+tags: [Finance]
+status: stable
+generated: { by: human:finance, at: 2026-07-15T00:00:00Z }
+verified: { by: human:finance, at: 2026-07-15T00:00:00Z }
 ---
 
 # Order Currency

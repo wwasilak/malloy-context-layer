@@ -6,10 +6,10 @@ description: "A natural or legal person who buys products from the company."
 synonyms: [buyer]
 steward: Sales
 preferred_source: base.customer_order_in_context
-tags: [Sales, approved]
-status: approved
-approved_by: Sales
-timestamp: 2026-07-15
+tags: [Sales]
+status: stable
+generated: { by: human:sales, at: 2026-07-15T00:00:00Z }
+verified: { by: human:sales, at: 2026-07-15T00:00:00Z }
 ---
 
 # Customer

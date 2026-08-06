@@ -19,8 +19,8 @@ from openpyxl.utils import get_column_letter
 KP  = sys.argv[1] if len(sys.argv) > 1 else 'kp'
 OUT = sys.argv[2] if len(sys.argv) > 2 else 'knowledge_plane_workbook.xlsx'
 
-STATUS_OUT = {'approved': 'Approved', 'in_review': 'In review',
-              'draft': 'Draft', 'deprecated': 'Deprecated'}
+# OKF v0.2 lifecycle (SPEC.md §5.4): draft | stable | deprecated.
+STATUS_OUT = {'stable': 'Approved', 'draft': 'Draft', 'deprecated': 'Deprecated'}
 DOMAIN_TO_STEWARD = {'sales': 'Sales', 'finance': 'Finance',
                      'merchandising': 'Merchandising', 'operations': 'Retail Operations'}
 KINDS = {'entity', 'defined_class', 'measure', 'attribute'}
@@ -51,6 +51,11 @@ def unlist(v):
         return ', '.join(x.strip().strip('"') for x in v[1:-1].split(',') if x.strip())
     return v
 
+def flow_field(v, key):
+    """Pull `key` out of an inline flow mapping like '{ by: human:sales, at: 2026-07-15T00:00:00Z }'."""
+    m = re.search(key + r':\s*([^,}]+)', v or '')
+    return m.group(1).strip() if m else ''
+
 concepts, relationships = [], []
 namespace = 'https://yourorg.example/kp#'
 cfg = os.path.join(KP, 'bundle.yaml')
@@ -65,17 +70,23 @@ for root, dirs, files in os.walk(KP):
         d = frontmatter(os.path.join(root, fn))
         if not d or d.get('type') not in KINDS: continue
         domain = os.path.relpath(root, KP).split(os.sep)[0]
+        steward = unq(d.get('steward', '')) or DOMAIN_TO_STEWARD.get(domain, '')
+        status = STATUS_OUT.get(unq(d.get('status', 'draft')), 'Draft')
+        # governance now lives in `verified` (a human: actor), not `status` alone —
+        # only a verified concept gets an 'Approved by' / 'Approved on' back in the sheet.
+        verified_at = flow_field(d.get('verified', ''), 'at')
+        generated_at = flow_field(d.get('generated', ''), 'at')
         c = {
             'URI': unq(d.get('uri')), 'Label': unq(d.get('title')), 'Kind': d.get('type'),
             'Definition': unq(d.get('description')), 'Synonyms': unlist(d.get('synonyms', '')),
-            'Steward': unq(d.get('steward', '')) or DOMAIN_TO_STEWARD.get(domain, ''),
+            'Steward': steward,
             'Subtype of': unq(d.get('subtype_of', '')), 'Of (entity)': unq(d.get('of', '')),
             'Membership rule': unq(d.get('membership_rule', '')),
             'Preferred source': unq(d.get('preferred_source', '')),
             'Allowed roles': unlist(d.get('allowed_roles', '')),
-            'Approval status': STATUS_OUT.get(unq(d.get('status', 'draft')), 'Draft'),
-            'Approved by': unq(d.get('approved_by', '')),
-            'Approved on': unq(d.get('timestamp', ''))[:10],
+            'Approval status': status,
+            'Approved by': steward if verified_at else '',
+            'Approved on': (verified_at or generated_at)[:10],
             'Validation status': unq(d.get('validation_status', '')).capitalize() or 'Not started',
             'Checked against': unq(d.get('checked_against', '')),
             'Validation notes': unq(d.get('validation_notes', '')),
@@ -138,7 +149,7 @@ lines = [
     ('Membership rule — for defined_class only: the exact rule, applied verbatim everywhere.', False),
     ('Preferred source— which data model is the official source when several carry this concept (BI advises).', False),
     ('Allowed roles   — leave blank if everyone may see it; else comma-separated roles.', False),
-    ('Approval status — Draft -> In review -> Approved. Deprecated retires a concept.', False),
+    ('Approval status — Draft -> Approved. Deprecated retires a concept.', False),
     ('Approved on     — date of approval; becomes the audit timestamp.', False),
     ('Validation cols — BI fills: whether the implemented number was checked against a trusted source.', False),
     ('', False),
@@ -166,7 +177,7 @@ for r, c in enumerate(concepts, 2):
     ws.cell(row=r, column=14).number_format = 'yyyy-mm-dd'
 n = len(concepts) + 1
 dv(ws, '"entity,attribute,measure,defined_class"', f'C2:C{n}')
-dv(ws, '"Draft,In review,Approved,Deprecated"',    f'L2:L{n}')
+dv(ws, '"Draft,Approved,Deprecated"',    f'L2:L{n}')
 dv(ws, '"Not started,Passed,Failed"',              f'P2:P{n}')
 
 # Relationships
@@ -176,13 +187,13 @@ style_headers(wr, rh, [24,20,22,22,16])
 for r, rel in enumerate(relationships, 2):
     for i, h in enumerate(rh, 1):
         wr.cell(row=r, column=i, value=rel.get(h, '')).font = BODY_FONT
-dv(wr, '"Draft,In review,Approved,Deprecated"', f'E2:E{len(relationships)+1}')
+dv(wr, '"Draft,Approved,Deprecated"', f'E2:E{len(relationships)+1}')
 
 # Lists
 wl = wb.create_sheet('Lists')
 style_headers(wl, ['Kinds','Approval statuses','Validation statuses','Stewards'], [16,18,18,20])
 cols = [['entity','attribute','measure','defined_class'],
-        ['Draft','In review','Approved','Deprecated'],
+        ['Draft','Approved','Deprecated'],
         ['Not started','Passed','Failed'],
         sorted({c['Steward'] for c in concepts if c['Steward']})]
 for j, col in enumerate(cols, 1):

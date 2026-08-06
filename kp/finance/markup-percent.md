@@ -4,10 +4,10 @@ type: measure
 title: "Markup Percent"
 description: "Gross margin expressed as a share of cost of goods sold: margin divided by total cost."
 steward: Finance
-tags: [Finance, approved]
-status: approved
-approved_by: Finance
-timestamp: 2026-07-15
+tags: [Finance]
+status: stable
+generated: { by: human:finance, at: 2026-07-15T00:00:00Z }
+verified: { by: human:finance, at: 2026-07-15T00:00:00Z }
 ---
 
 # Markup Percent

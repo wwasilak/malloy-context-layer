@@ -3,9 +3,10 @@ uri: kp:TotalSales
 type: measure
 title: "Total Sales"
 description: "Sum of line revenue across all order lines in scope."
-tags: [global, approved]
-status: approved
-timestamp: 2026-07-15
+tags: [global]
+status: stable
+generated: { by: human:global, at: 2026-07-15T00:00:00Z }
+verified: { by: human:global, at: 2026-07-15T00:00:00Z }
 last_validated: 2026-07-28
 ---
 

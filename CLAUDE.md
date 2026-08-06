@@ -1,8 +1,8 @@
 ---
 owner: Knowledge Plane
-status: approved
-approved_by: Knowledge Plane
-timestamp: 2026-07-29
+status: stable
+generated: { by: human:knowledge-plane, at: 2026-07-29T00:00:00Z }
+verified: { by: human:knowledge-plane, at: 2026-08-06T00:00:00Z }
 ---
 
 # Working with the Knowledge Plane + Malloy models
@@ -28,7 +28,9 @@ timestamp: 2026-07-29
 ## Routing: question -> answer
 
 1. Resolve the question to concepts via the routing table (labels, definitions;
-   synonyms are in the concept files). Only `approved` concepts are governed.
+   synonyms are in the concept files). Only concepts that are BOTH
+   `status: stable` AND human-verified (a `verified` entry with a `human:`
+   actor — see the routing table's Verified column) are governed.
    If a label matches concepts in both `global/` and a domain folder, use the
    global one — unless the question names the domain ("sales' definition of…").
    Say which definition was applied.

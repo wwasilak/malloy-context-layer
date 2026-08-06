@@ -3,8 +3,8 @@
 
 | Concept | Kind | Status | Definition |
 |---|---|---|---|
-| [Customer](./customer.md) `kp:Customer` | entity | approved | A natural or legal person who buys products from the company. |
-| [Order](./order.md) `kp:Order` | entity | approved | A purchase transaction placed by a customer at a store on a given date, composed of one or more order lines. |
-| [Order Line](./order-line.md) `kp:OrderLine` | entity | approved | A single line on an order, recording one product, its quantity and the prices applied at sale time. |
-| [Active Customer](./active-customer.md) `kp:ActiveCustomer` | defined_class | approved | A customer with at least one order in the last 2 years. |
-| [Average Order Value](./average-order-value.md) `kp:AverageOrderValue` | measure | approved | Average revenue per order: total sales divided by order count. |
+| [Customer](./customer.md) `kp:Customer` | entity | stable | A natural or legal person who buys products from the company. |
+| [Order](./order.md) `kp:Order` | entity | stable | A purchase transaction placed by a customer at a store on a given date, composed of one or more order lines. |
+| [Order Line](./order-line.md) `kp:OrderLine` | entity | stable | A single line on an order, recording one product, its quantity and the prices applied at sale time. |
+| [Active Customer](./active-customer.md) `kp:ActiveCustomer` | defined_class | stable | A customer with at least one order in the last 2 years. |
+| [Average Order Value](./average-order-value.md) `kp:AverageOrderValue` | measure | stable | Average revenue per order: total sales divided by order count. |

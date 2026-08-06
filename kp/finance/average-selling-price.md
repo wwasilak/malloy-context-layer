@@ -5,10 +5,10 @@ title: "Average Selling Price"
 description: "Net sales divided by units sold; the average realized price per unit. (ASP)"
 synonyms: [ASP]
 steward: Finance
-tags: [Finance, approved]
-status: approved
-approved_by: Finance
-timestamp: 2026-07-15
+tags: [Finance]
+status: stable
+generated: { by: human:finance, at: 2026-07-15T00:00:00Z }
+verified: { by: human:finance, at: 2026-07-15T00:00:00Z }
 ---
 
 # Average Selling Price
