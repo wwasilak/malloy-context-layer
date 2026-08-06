@@ -50,6 +50,57 @@ issued with an ungoverned receipt. Candidate eval case: a name-match question
 where the naive pattern is provably contaminated, asserting the answer both
 reports the ungoverned basis and shows what matched. See `kp/agent/gap-log.md`.
 
+### 2026-08-05 — "Who is our best customer this month?"
+
+**Answer given — figures correct, tier and receipt wrong.** Riley Osborne
+ranked #1 by `kp:TotalSales` for April 2024 ($27,051), top 5 shown rather than
+just the winner, time correctly anchored to max_date (2024-04-20, partial
+month, stated as such), customer name fields correctly treated as labels not
+a classification. Receipt read `Basis: ranking of kp:TotalSales (governed)
+grouped by kp:Customer (governed) | Freshness: 2024-04-20, partial month
+(anchored to max_date) | Steward: global (TotalSales) / Sales (Customer)`.
+Logged as tier 2 in the moment, but not written to `question-log.md` at all —
+a second miss on top of the mistier, since CLAUDE.md requires a line for
+every novel tier-2/3 analysis.
+
+**Root cause: "best" was treated as an analysis method, not a classification.**
+Ranking is tier-2 freedom, so the query mechanics were fine — but nobody has
+ruled that "best" means highest total spend; ranking the same customers by
+`kp:Margin` or `kp:OrderCount` would each surface a different name, and the
+plane does not say which is right. That makes "best" an ungoverned
+classification standing over a governed measure, the same governs-the-slice
+rule as the 2026-08-04 bike-revenue correction, just applied to a ranking
+criterion instead of a `where:` filter. A governed measure under an
+ungoverned classification is tier 3 no matter how clean the measure or how
+correct the numbers are.
+
+**Contributing cause: protocol discovery by grep instead of the routes
+CLAUDE.md already documents.** Four Bash greps in the same turn (into
+`examples.md`, twice into `models/base.malloy`, once for a steward name) where
+the routing table's binding column, a single concept-frontmatter read, and
+`describe_source`/`compile` were each the cheaper, documented route. The one
+legitimate miss was the `TENANT` given in `base.malloy` — CLAUDE.md does not
+mention the givens mechanism at all, so there was no protocol-sanctioned way
+to discover it short of reading the model. That gap belongs in CLAUDE.md, not
+in a workaround repeated every session; the answer should have said so
+instead of silently grepping past it.
+
+**Fix applied.** Gap log records "best" (and siblings: top, key account, most
+valuable) as an ungoverned ranking criterion — see `kp/agent/gap-log.md`.
+Question log entry added, tier 3, noting the original mistier. Corrected
+receipt for this question:
+
+`Basis: kp:TotalSales (governed) grouped by kp:Customer (governed), ranked by
+an UNGOVERNED "best" criterion (highest total spend; margin or order count
+would rank differently) | Freshness: 2024-04-20, partial month (anchored to
+max_date) | Steward: global (TotalSales) / Sales (Customer)`
+
+**Standing rule going forward:** the word UNGOVERNED belongs in the `Basis`
+line whenever an ungoverned step is anywhere in the chain — measure, slice,
+*or ranking criterion* — not only when the ungoverned step is a `where:`
+filter. A reader trusts the receipt without reading the prose; the receipt is
+where "ranked by an ungoverned criterion" has to be visible.
+
 ## Standing hints (reviewed, ungoverned)
 
 - **kp:ActiveCustomer counts decay with the wall clock.** The bound measure
@@ -94,3 +145,20 @@ the next agent does on a question it has not seen yet.
   in seven SLR-like cameras carrying 96% of the revenue. Any name match standing
   in for a category must be `group_by`-ed and displayed before the figure is
   reported. *General; no single concept owns it.*
+
+- **Superlatives are ungoverned classifications, not analysis methods.**
+  "Best", "top", "key account", "most valuable" name a ranking criterion, and
+  the plane has not ruled which measure that criterion means — total spend,
+  margin and order count each produce a different answer. Governance applies
+  to the slice as well as the measure (see 2026-08-05 above), and a ranking
+  criterion is a slice: a governed measure ranked by an ungoverned superlative
+  is tier 3, and the receipt must say UNGOVERNED even when every number in it
+  is correct. *General; no single concept owns it — a recurring superlative
+  is a candidate for a governed `defined_class` with an explicit ranking rule.*
+
+- **CLAUDE.md doesn't document the `given:` mechanism used in `models/base.malloy`
+  (e.g. `TENANT`).** Until a steward PR adds it, discovering a required given
+  means reading the model directly — say so in the answer rather than treating
+  the grep as free. Do not let this note license grepping `models/` for
+  anything else the routing table or `describe_source`/`compile` already give
+  you. *Protocol gap, not a concept; raised 2026-08-05.*
