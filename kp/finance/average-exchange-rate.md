@@ -4,10 +4,10 @@ type: measure
 title: "Average Exchange Rate"
 description: "Average currency exchange rate applied to convert order lines into the reporting currency."
 steward: Finance
-tags: [Finance, approved]
-status: approved
-approved_by: Finance
-timestamp: 2026-07-15
+tags: [Finance]
+status: stable
+generated: { by: human:finance, at: 2026-07-15T00:00:00Z }
+verified: { by: human:finance, at: 2026-07-15T00:00:00Z }
 ---
 
 # Average Exchange Rate

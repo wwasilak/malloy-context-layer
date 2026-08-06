@@ -4,10 +4,10 @@ type: attribute
 title: "Delivery Days"
 description: "Number of days between the order date and the delivery date for an order."
 steward: "Retail Operations"
-tags: ["Retail Operations", approved]
-status: approved
-approved_by: "Retail Operations"
-timestamp: 2026-07-15
+tags: ["Retail Operations"]
+status: stable
+generated: { by: human:retail-operations, at: 2026-07-15T00:00:00Z }
+verified: { by: human:retail-operations, at: 2026-07-15T00:00:00Z }
 ---
 
 # Delivery Days

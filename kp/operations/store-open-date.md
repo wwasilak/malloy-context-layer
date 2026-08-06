@@ -5,10 +5,10 @@ title: "Store Open Date"
 description: "The date on which a store opened for business."
 steward: "Retail Operations"
 of: kp:Store
-tags: ["Retail Operations", approved]
-status: approved
-approved_by: "Retail Operations"
-timestamp: 2026-07-15
+tags: ["Retail Operations"]
+status: stable
+generated: { by: human:retail-operations, at: 2026-07-15T00:00:00Z }
+verified: { by: human:retail-operations, at: 2026-07-15T00:00:00Z }
 ---
 
 # Store Open Date

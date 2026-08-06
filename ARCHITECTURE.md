@@ -11,9 +11,12 @@ per file, versioned in git. Folder = tier: `global/` = company-wide definitions
 frontmatter. Frontmatter: uri, type (entity | defined_class | measure |
 attribute), title, description, synonyms, steward, subtype_of, of (attribute →
 entity attachment), membership_rule, preferred_source, allowed_roles,
-last_validated (eval-runner-stamped), status (draft | in_review | approved |
-deprecated), tags. New concept = copy from `_templates/`. Files with any other
-`type` are operational docs, not concepts:
+last_validated (eval-runner-stamped), status (draft | stable | deprecated —
+OKF v0.2 lifecycle), generated (`{ by, at }`, who/when authored the content),
+verified (`{ by, at }` or a list — **the actual governance gate**: the agent
+routes to a concept only when it is `status: stable` AND has a `human:`
+`verified` entry), tags. New concept = copy from `_templates/`. Files with any
+other `type` are operational docs, not concepts:
 
 - `kp/agent/examples.md` — canonical query shapes the agent copies
 - `kp/agent/gap-log.md` — agent-appended terms with no concept (demand-ranked backlog)
@@ -65,8 +68,9 @@ separate knowledge_map.json — the bundle IS the agent context.
    preferred_source resolves to a real (model, source).
 4. Drift sensor: declared `of:` vs the entity of the source the field is
    actually implemented on -> WARN.
-5. Coverage: approved-but-unbuilt concepts; built-but-ungoverned fields
-   (no # concept annotation) -> WARN.
+5. Coverage: governed-but-unbuilt concepts (`status: stable` + human `verified`,
+   no implementation) -> hard fail; built-but-ungoverned fields (no # concept
+   annotation) -> WARN.
 6. Write-back: Implementations tables, routing table (root index), domain
    indexes, data coverage (min/max of bundle.yaml `temporal_anchor`), views.
 7. Regenerate both graphs — `kp_viz.html` (full plane) and

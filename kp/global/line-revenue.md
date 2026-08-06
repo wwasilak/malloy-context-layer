@@ -3,9 +3,10 @@ uri: kp:LineRevenue
 type: measure
 title: "Line Revenue"
 description: "Gross revenue for one order line: quantity times net price."
-tags: [global, approved]
-status: approved
-timestamp: 2026-07-15
+tags: [global]
+status: stable
+generated: { by: human:global, at: 2026-07-15T00:00:00Z }
+verified: { by: human:global, at: 2026-07-15T00:00:00Z }
 ---
 
 # Line Revenue

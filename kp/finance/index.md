@@ -3,12 +3,12 @@
 
 | Concept | Kind | Status | Definition |
 |---|---|---|---|
-| [Calendar Date](./calendar-date.md) `kp:CalendarDate` | entity | approved | A single calendar day, used as the temporal anchor for transactions and reporting periods. |
-| [Currency Exchange Rate](./currency-exchange-rate.md) `kp:CurrencyExchangeRate` | entity | approved | The daily rate for converting an amount from one currency into a reporting currency. |
-| [Average Exchange Rate](./average-exchange-rate.md) `kp:AverageExchangeRate` | measure | approved | Average currency exchange rate applied to convert order lines into the reporting currency. |
-| [Average Selling Price](./average-selling-price.md) `kp:AverageSellingPrice` | measure | approved | Net sales divided by units sold; the average realized price per unit. (ASP) |
-| [Discount Amount](./discount-amount.md) `kp:DiscountAmount` | measure | approved | Total discount given: gross (list) revenue minus net sales, in the reporting currency. |
-| [Discount Rate](./discount-rate.md) `kp:DiscountRate` | measure | approved | Discount amount as a share of gross (list) revenue. |
-| [Gross Revenue](./gross-revenue.md) `kp:GrossRevenue` | measure | approved | Total revenue valued at list price, before discounts, in the reporting currency. |
-| [Markup Percent](./markup-percent.md) `kp:MarkupPercent` | measure | approved | Gross margin expressed as a share of cost of goods sold: margin divided by total cost. |
-| [Order Currency](./order-currency.md) `kp:OrderCurrency` | attribute | approved | The original transaction currency in which an order was placed. |
+| [Calendar Date](./calendar-date.md) `kp:CalendarDate` | entity | stable | A single calendar day, used as the temporal anchor for transactions and reporting periods. |
+| [Currency Exchange Rate](./currency-exchange-rate.md) `kp:CurrencyExchangeRate` | entity | stable | The daily rate for converting an amount from one currency into a reporting currency. |
+| [Average Exchange Rate](./average-exchange-rate.md) `kp:AverageExchangeRate` | measure | stable | Average currency exchange rate applied to convert order lines into the reporting currency. |
+| [Average Selling Price](./average-selling-price.md) `kp:AverageSellingPrice` | measure | stable | Net sales divided by units sold; the average realized price per unit. (ASP) |
+| [Discount Amount](./discount-amount.md) `kp:DiscountAmount` | measure | stable | Total discount given: gross (list) revenue minus net sales, in the reporting currency. |
+| [Discount Rate](./discount-rate.md) `kp:DiscountRate` | measure | stable | Discount amount as a share of gross (list) revenue. |
+| [Gross Revenue](./gross-revenue.md) `kp:GrossRevenue` | measure | stable | Total revenue valued at list price, before discounts, in the reporting currency. |
+| [Markup Percent](./markup-percent.md) `kp:MarkupPercent` | measure | stable | Gross margin expressed as a share of cost of goods sold: margin divided by total cost. |
+| [Order Currency](./order-currency.md) `kp:OrderCurrency` | attribute | stable | The original transaction currency in which an order was placed. |

@@ -17,8 +17,9 @@ WB_FILE = sys.argv[1] if len(sys.argv) > 1 else 'knowledge_plane_workbook.xlsx'
 OUT     = sys.argv[2] if len(sys.argv) > 2 else 'kp'
 
 KINDS = {'entity', 'defined_class', 'measure', 'attribute'}
-STATUS_MAP = {'Approved': 'approved', 'In review': 'in_review',
-              'Draft': 'draft', 'Deprecated': 'deprecated'}
+# OKF v0.2 lifecycle (SPEC.md §5.4): draft | stable | deprecated. 'In review'
+# has no v0.2 equivalent, so it falls back to 'draft' via STATUS_MAP.get(...).
+STATUS_MAP = {'Approved': 'stable', 'Draft': 'draft', 'Deprecated': 'deprecated'}
 STEWARD_TO_DOMAIN = {'Sales': 'sales', 'Finance': 'finance',
                      'Merchandising': 'merchandising', 'Retail Operations': 'operations'}
 GEN_BEGIN = '<!-- BEGIN GENERATED: implementations (written by exporter; do not edit) -->'
@@ -92,6 +93,9 @@ def domain_of(c): return STEWARD_TO_DOMAIN.get(c.get('Steward'), 'global')
 def kebab(uri):   return re.sub(r'(?<!^)(?=[A-Z])', '-', uri.split(':')[1]).lower()
 path_of = {u: f'{domain_of(c)}/{kebab(u)}.md' for u, c in concepts.items()}
 
+def slugify(s):
+    return re.sub(r'(^-|-$)', '', re.sub(r'[^a-z0-9]+', '-', str(s).lower().strip()))
+
 def yq(s):
     if isinstance(s, list): return '[' + ', '.join(yq(x) for x in s) + ']'
     s = str(s)
@@ -142,16 +146,18 @@ for uri in order:
         for r in sorted(myrels, key=lambda x: x['URI']):
             fm += [f'  - uri: {yq(r["URI"])}', f'    verb: {yq(r["Verb phrase"])}',
                    f'    range: {yq(r["To (range)"])}']
-    fm.append(f'tags: {yq([c.get("Steward") or "global", status])}')
+    fm.append(f'tags: {yq([c.get("Steward") or "global"])}')
     fm.append(f'status: {status}')
-    if c.get('Approved by'):      fm.append(f'approved_by: {yq(c["Approved by"])}')
     vs = c.get('Validation status')
     if vs and vs != 'Not started':
         fm.append(f'validation_status: {yq(str(vs).lower())}')
         if c.get('Checked against'):  fm.append(f'checked_against: {yq(c["Checked against"])}')
         if c.get('Validation notes'): fm.append(f'validation_notes: {yq(c["Validation notes"])}')
     if last_validated:            fm.append(f'last_validated: {last_validated}')
-    fm.append(f'timestamp: {ao or today}')
+    actor = f'human:{slugify(c.get("Steward") or "global")}'
+    at = f'{ao or today}T00:00:00Z'
+    fm.append(f'generated: {{ by: {actor}, at: {at} }}')
+    if status == 'stable':        fm.append(f'verified: {{ by: {actor}, at: {at} }}')
 
     body = [f'# {c["Label"]}', '', c['Definition'], '']
     if c.get('Membership rule'):

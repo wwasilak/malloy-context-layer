@@ -4,9 +4,10 @@ type: attribute
 title: "Customer City"
 description: "City of residence of the customer."
 of: kp:Customer
-tags: [global, approved]
-status: approved
-timestamp: 2026-07-15
+tags: [global]
+status: stable
+generated: { by: human:global, at: 2026-07-15T00:00:00Z }
+verified: { by: human:global, at: 2026-07-15T00:00:00Z }
 ---
 
 # Customer City

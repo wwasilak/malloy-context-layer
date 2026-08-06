@@ -4,10 +4,10 @@ type: measure
 title: "Average Delivery Days"
 description: "Average number of days between order date and delivery date across orders in scope."
 steward: "Retail Operations"
-tags: ["Retail Operations", approved]
-status: approved
-approved_by: "Retail Operations"
-timestamp: 2026-07-15
+tags: ["Retail Operations"]
+status: stable
+generated: { by: human:retail-operations, at: 2026-07-15T00:00:00Z }
+verified: { by: human:retail-operations, at: 2026-07-15T00:00:00Z }
 ---
 
 # Average Delivery Days

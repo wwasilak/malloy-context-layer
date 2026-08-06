@@ -3,9 +3,9 @@
 
 | Concept | Kind | Status | Definition |
 |---|---|---|---|
-| [Product](./product.md) `kp:Product` | entity | approved | A sellable item offered to customers, identified by a stable product key. |
-| [Distinct Products Sold](./distinct-products-sold.md) `kp:DistinctProductsSold` | measure | approved | Number of distinct products that appear on at least one order line in scope. |
-| [List Price Margin Percent](./list-price-margin-percent.md) `kp:ListPriceMarginPercent` | measure | approved | Average catalog margin of products: (list price minus unit cost) divided by list price. |
-| [Product Color](./product-color.md) `kp:ProductColor` | attribute | approved | Color the product is sold in. |
-| [Product Manufacturer](./product-manufacturer.md) `kp:ProductManufacturer` | attribute | approved | Manufacturer that produces the product. |
-| [Product Sub-Category](./product-sub-category.md) `kp:ProductSubCategory` | attribute | approved | Merchandising sub-category of the product, below its top-level category. |
+| [Product](./product.md) `kp:Product` | entity | stable | A sellable item offered to customers, identified by a stable product key. |
+| [Distinct Products Sold](./distinct-products-sold.md) `kp:DistinctProductsSold` | measure | stable | Number of distinct products that appear on at least one order line in scope. |
+| [List Price Margin Percent](./list-price-margin-percent.md) `kp:ListPriceMarginPercent` | measure | stable | Average catalog margin of products: (list price minus unit cost) divided by list price. |
+| [Product Color](./product-color.md) `kp:ProductColor` | attribute | stable | Color the product is sold in. |
+| [Product Manufacturer](./product-manufacturer.md) `kp:ProductManufacturer` | attribute | stable | Manufacturer that produces the product. |
+| [Product Sub-Category](./product-sub-category.md) `kp:ProductSubCategory` | attribute | stable | Merchandising sub-category of the product, below its top-level category. |

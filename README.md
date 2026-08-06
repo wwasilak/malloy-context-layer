@@ -78,6 +78,8 @@ npm run eval:report    # pass rate by category + what flipped since last run
 
 ## Where to look
 
+- **[SPEC.md](SPEC.md)** — the Open Knowledge Format spec this bundle targets
+  (v0.2: `kp/bundle.yaml`'s `okf_version`, asserted by `okf-lib.js`).
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** — how the two planes, the links, and the
   build fit together; authoring surfaces (direct edit vs Excel round-trip).
 - **[docs/steward-onboarding.md](docs/steward-onboarding.md)** — add or edit a
