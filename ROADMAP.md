@@ -48,20 +48,20 @@ becoming the bottleneck). SIMP-2, 3, 4 and 5 have all shipped.
 
 ### Picked up next, in order
 
-1. **EVAL-18 code is DONE (2026-08-07)** — harness-wide fix: all 16 case files
-   moved `kp/agent/evals/*.md` → `evals/cases/*.md`, outside the `kp/` tree the
-   agent explores, so a run can't read its own answer key. All three gates
-   green. See EVAL-18's section for the full record and the residual.
-2. **Live re-audit still owed** (needs live runs): confirm
-   `discount-band-per-order`, `north-america-qoq-channel` and
-   `online-delivery-delay-by-country` now correctly FAIL the stripped phase,
-   and get one confirming rerun of `bike-name-match-contamination` (its real-
-   protocol run mismatched gold on the latest audit — `none` where prior runs
-   were `exact`/`subset` — status unclear: single-run variance or a real
-   regression, quorum was 1).
-3. **Then commit the EVAL-5 harvest on `eval-5-harvest`** (uncommitted: the 9
-   case files, the `must_not_contain`/EXEMPT fixes, and EVAL-15/16/17/18's
-   code) and update the case count here.
+1. **EVAL-18 DONE and CONFIRMED (2026-08-07)** — harness-wide fix: all 16 case
+   files moved `kp/agent/evals/*.md` → `evals/cases/*.md`, outside the `kp/`
+   tree the agent explores. Re-audit confirmed the 3 formerly-blocked cases now
+   discriminate (relocation alone sufficient, no hiding needed). Committed
+   `71f03e2` on `eval-5-harvest`. See EVAL-18's section.
+2. **DECISION PENDING — `bike-name-match-contamination` real=fail** is a
+   GRADING fragility, not a product error. Verified locally: the agent's answer
+   is correct (top-5 + revenues identical to gold). It fails query_shape on
+   presentation only — a nested result (EVAL-19) and a different customer
+   projection. Options: re-target the case's gold to a projection-robust signal
+   (the 5 revenues / surnames), and/or land EVAL-19 (grader nest-descent). See
+   EVAL-18's bike-name entry and EVAL-19.
+3. **Continue EVAL-5 harvest** toward ~30 (Home Appliances discount/margin
+   question + control variant identified, not yet authored).
 4. **Post-merge review follow-ups logged (2026-08-07)** — OKF-6 (unit-test the
    governance predicate) and OKF-7 (replace the Python regex frontmatter parse
    with real YAML) are the two high-value ones; see Phase 2d's "Review
@@ -358,7 +358,7 @@ the bug above. Six new unit tests, including one that pins the false-positive
 specifically: a "basis" in one message and an unrelated "freshness" in another
 must NOT combine into a passing receipt.
 
-### EVAL-18 · The stripped-protocol control doesn't hide `kp/agent/evals/` itself · CODE DONE 2026-08-07 (cases moved to `evals/cases/`); live re-audit still owed
+### EVAL-18 · The stripped-protocol control doesn't hide `kp/agent/evals/` itself · DONE 2026-08-07 (cases moved to `evals/cases/`; re-audit confirmed, relocation alone sufficient)
 
 **The bug.** Re-running the selftest audit after EVAL-15, 16 and 17 shipped,
 three cases still passed the STRIPPED protocol:
@@ -436,19 +436,79 @@ but is NOT a hard sandbox — a Glob-happy agent could still reach `evals/cases/
 A true guarantee is `DISALLOWED_TOOLS`/path-restriction, left as a separate
 future item.
 
-**Still owed (needs live runs — cost, and an LLM):**
-1. Re-run the selftest audit on `discount-band-per-order`,
-   `north-america-qoq-channel`, `online-delivery-delay-by-country` to confirm
-   they now correctly FAIL the stripped phase. If any still passes stripped,
-   relocation was insufficient → add `evals/cases/` to `hideOperationalDocs`
-   for `--protocol` runs (the fallback described above).
-2. Get a confirming rerun of `bike-name-match-contamination`.
-3. Once all 9 harvested cases are confirmed green: commit `eval-5-harvest`
-   (the 9 case files, the `must_not_contain`/EXEMPT fixes, and EVAL-15
-   through EVAL-18's code), update the case count here, and continue
-   harvesting toward ~30 from the remaining `question-log.md` entries (Home
-   Appliances discount/margin question and its control variant were
-   identified but not yet authored).
+**Re-audit CONFIRMED (2026-08-07)** — evidence:
+`evals/results/selftest/2026-08-07T10-*.jsonl` (8 tier-2 runs). The three
+formerly-blocked cases now discriminate cleanly, so relocation ALONE was
+sufficient and no hiding machinery was needed:
+
+| Case | stripped | real | verdict |
+|---|---|---|---|
+| `discount-band-per-order` | fail | pass | OK — discriminates |
+| `north-america-qoq-channel` | fail | pass | OK — discriminates |
+| `online-delivery-delay-by-country` | fail | pass | OK — discriminates |
+
+The stripped phase now correctly FAILS (the answer-key leak is closed); every
+stripped run flagged `missing AGT-1 provenance receipt`, which is the honest
+floor for a no-protocol control. Committed as `71f03e2` on `eval-5-harvest`
+(the move + EVAL-15/16/17 code + the 9 harvest cases). Remaining harvest work:
+continue toward ~30 from the remaining `question-log.md` entries (Home
+Appliances discount/margin question and its control variant identified, not yet
+authored).
+
+**One holdout, and it is a GRADING fragility, not a product error:
+`bike-name-match-contamination` scored `stripped=fail, real=fail`** on this
+re-audit (quorum 1). NOT an EVAL-18 problem. Root-caused by re-executing the
+agent's own query locally (Malloy, no LLM) — **the agent's answer is correct**:
+its top-5 customers and revenues are IDENTICAL to gold (Spencer Spencer
+$548.69 … Harvey Barnes $506.12). The initial "wrong measure / overcount"
+reading was WRONG — `total_sales { where: …bike… }` compiles to a line-grain
+`SUM(CASE WHEN …bike… THEN Quantity*NetPrice*Exchange)`, mathematically equal
+to `kp:LineRevenue`; no overcount. It fails `query_shape` for two independent,
+presentation-only reasons:
+
+1. **Nesting (EVAL-19).** The agent wrapped the top-5 in a `nest:` alongside a
+   summary, so its result is ONE row with a nested array; gold is 5 flat rows.
+   `compareResults` (`evals/lib/malloy.js`) only ever compares top-level rows —
+   it never descends into a nested array column. A real grader gap, logged as
+   EVAL-19 below.
+2. **Projection.** Even flattened, the agent identifies customers as
+   `concat(GivenName,' ',Surname)` + revenue (2 cols); gold pins `CustomerKey`
+   + `GivenName` + `Surname` + revenue (4 cols). No tier bridges that: `values`
+   needs equal per-row value multisets, `subset`/`containsAll` needs
+   agentCols ≥ goldCols. So fixing EVAL-19 alone would NOT make this run pass.
+
+Earlier runs scored `exact` by returning a flat table with gold's exact
+columns — so the variance is PRESENTATIONAL, not correctness. This is the
+EVAL-11 tension (query_shape is brittle to a legitimately-different
+presentation of a correct answer). Decision pending on how to make the case
+robust to presentation while still catching the contamination (which changes
+the customers AND the figures entirely): re-target gold to a projection-robust
+discriminating signal (e.g. the five revenue values, or customers by surname),
+and/or land EVAL-19. Do NOT rerun-until-green — that games the signal.
+
+### EVAL-19 · `query_shape` grading never descends into a nested result · NEW, found 2026-08-07 root-causing bike-name
+
+**The gap.** `compareResults` (`evals/lib/malloy.js`) compares only the
+top-level rows of the agent's result against gold. When the agent returns a
+Malloy `nest:` — e.g. `[{ summary…, top_customers: [ …5 rows… ] }]` — the
+nested array is a legitimate result set the agent computed, but the comparison
+sees one row with an opaque array value and scores `none`. Confirmed on
+`bike-name-match-contamination`'s real run: the nested `top_customers` array is
+byte-identical to the 5-row gold, yet the case scored `none`. Same class as
+EVAL-9 (grader unsound against a legitimate answer shape), one dimension over:
+EVAL-9 was extra COLUMNS, this is a nested ROW SET.
+
+**Not yet fixed; scoped but not decided.** The plausible fix: in
+`gradeQueryShape`, treat each nested-array column as an additional candidate
+row set (flatten the nests across top-level rows) and keep the best match, so
+the ranked-tier machinery decides as usual. Guard against false positives the
+way `containsAll` already does (anchored matches only). NOTE this does NOT by
+itself fix `bike-name` — that run ALSO differs in projection (see EVAL-18's
+bike-name entry), so EVAL-19 is worth doing on its own merits (nested
+presentations are common and correct) but is not the whole story for that case.
+Needs a unit test pinning: a nested result whose nest equals gold matches at the
+nest's natural tier; a nested result whose nest does NOT equal gold still
+scores `none`.
 
 ---
 
