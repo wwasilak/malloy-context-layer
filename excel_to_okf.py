@@ -151,11 +151,14 @@ for uri in order:
         fm.append(f'validation_status: {yq(str(vs).lower())}')
         if c.get('Checked against'):  fm.append(f'checked_against: {yq(c["Checked against"])}')
         if c.get('Validation notes'): fm.append(f'validation_notes: {yq(c["Validation notes"])}')
-    if last_validated:            fm.append(f'last_validated: {last_validated}')
     actor = f'human:{slugify(c.get("Steward") or "global")}'
     at = f'{ao or today}T00:00:00Z'
     fm.append(f'generated: {{ by: {actor}, at: {at} }}')
     if status == 'stable':        fm.append(f'verified: {{ by: {actor}, at: {at} }}')
+    # last_validated is a build/eval stamp, emitted AFTER provenance to match the
+    # authored convention (generated -> verified -> last_validated). Emitting it
+    # before generated/verified broke round-trip byte-identity (OKF-10).
+    if last_validated:            fm.append(f'last_validated: {last_validated}')
 
     body = [f'# {c["Label"]}', '', c['Definition'], '']
     if c.get('Membership rule'):
@@ -178,7 +181,10 @@ for uri in order:
              gen_block if gen_block is not None else '_Not yet generated — run `node build.js`._',
              GEN_END, '']
 
-    with open(p, 'w', encoding='utf-8') as f:
+    # newline='\n': Python text mode defaults to os.linesep (CRLF on Windows),
+    # which fights the repo's LF policy (.gitattributes eol=lf). Pin LF so the
+    # output is byte-identical to the authored bundle on every OS (OKF-10).
+    with open(p, 'w', encoding='utf-8', newline='\n') as f:
         f.write('---\n' + '\n'.join(fm) + '\n---\n\n' + '\n'.join(body))
     counts[domain_of(c)] = counts.get(domain_of(c), 0) + 1
 
@@ -186,7 +192,7 @@ cfg_path = os.path.join(OUT, 'bundle.yaml')
 extra = []
 if os.path.exists(cfg_path):
     extra = [l.rstrip('\n') for l in open(cfg_path) if l.strip() and not l.startswith('namespace:')]
-with open(cfg_path, 'w') as f:
+with open(cfg_path, 'w', encoding='utf-8', newline='\n') as f:
     f.write(f'namespace: "{namespace}"\n' + ('\n'.join(extra) + '\n' if extra else ''))
 
 # prune concepts whose URI vanished (never touches agent/, _templates/, indexes)
