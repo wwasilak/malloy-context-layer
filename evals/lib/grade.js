@@ -20,7 +20,7 @@
 //   actually executed. Exploration is not commitment. A compile of an expression
 //   the agent then correctly discards is the loop working, not a violation.
 // =============================================================================
-const { compareResults, MATCH_RANK } = require('./malloy');
+const { bestMatch, MATCH_RANK } = require('./malloy');
 
 // ---- text helpers -----------------------------------------------------------
 // Whitespace-insensitive containment. `sum(line_revenue - line_cost)` and
@@ -243,13 +243,15 @@ async function gradeQueryShape(caseDef, run, ctx) {
       allMatched = false;
       continue;
     }
-    // Keep the strongest match across the agent's queries. Ranked rather than
+    // Keep the strongest match across the agent's queries. `bestMatch` considers
+    // both the flat rows and any nested row set (EVAL-19), so a correct answer
+    // presented as summary+nest is not scored 'none'. Ranked rather than
     // special-cased, so adding a tier to compareResults cannot silently fall
     // through to 'none' here.
     let best = 'none';
     for (const ar of agentResults) {
       if (!ar.rows) continue;
-      const cmp = compareResults(ar.rows, goldRows);
+      const cmp = bestMatch(ar.rows, goldRows);
       if (MATCH_RANK[cmp] > MATCH_RANK[best]) best = cmp;
       if (best === 'exact') break;
     }

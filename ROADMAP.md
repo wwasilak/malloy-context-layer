@@ -53,12 +53,11 @@ becoming the bottleneck). SIMP-2, 3, 4 and 5 have all shipped.
    tree the agent explores. Re-audit confirmed the 3 formerly-blocked cases now
    discriminate (relocation alone sufficient, no hiding needed). Committed
    `71f03e2` on `eval-5-harvest`. See EVAL-18's section.
-2. **DECISION PENDING — `bike-name-match-contamination` real=fail** is a
-   GRADING fragility, not a product error. Verified locally: the agent's answer
-   is correct (top-5 + revenues identical to gold). It fails query_shape on
-   presentation only — a nested result (EVAL-19) and a different customer
-   projection. Options: re-target the case's gold to a projection-robust signal
-   (the 5 revenues / surnames), and/or land EVAL-19 (grader nest-descent). See
+2. **`bike-name-match-contamination` RESOLVED (2026-08-07)** — it was a grading
+   fragility, not a product error (the agent's answer was always correct). Fixed
+   in three layers: revenue-robust gold, EVAL-19 (grader descends into nests),
+   and dropping the redundant `must_not_contain`. Discriminates across 4 live
+   runs (real pass ×2 / stripped fail ×2). EVAL-19 shipped and unit-tested. See
    EVAL-18's bike-name entry and EVAL-19.
 3. **Continue EVAL-5 harvest** toward ~30 (Home Appliances discount/margin
    question + control variant identified, not yet authored).
@@ -480,13 +479,36 @@ presentation-only reasons:
 Earlier runs scored `exact` by returning a flat table with gold's exact
 columns — so the variance is PRESENTATIONAL, not correctness. This is the
 EVAL-11 tension (query_shape is brittle to a legitimately-different
-presentation of a correct answer). Decision pending on how to make the case
-robust to presentation while still catching the contamination (which changes
-the customers AND the figures entirely): re-target gold to a projection-robust
-discriminating signal (e.g. the five revenue values, or customers by surname),
-and/or land EVAL-19. Do NOT rerun-until-green — that games the signal.
+presentation of a correct answer).
 
-### EVAL-19 · `query_shape` grading never descends into a nested result · NEW, found 2026-08-07 root-causing bike-name
+**RESOLVED 2026-08-07** (revenue-robust gold + EVAL-19 + dropped
+`must_not_contain`). The fix came in three layers, each only visible once the
+one above it was peeled, across four live selftest runs:
+
+1. **Gold re-targeted to the five revenue VALUES** (`select: bike_revenue` off
+   the top-5, `min_match: subset`). Projection-robust: the contamination changes
+   the figures entirely (camera-dominated, larger → `none`), while a correct
+   answer passes however it labels or nests its customers. Revenues are
+   customer-specific, so the right five imply the right five customers.
+2. **EVAL-19** so `query_shape` descends into the agent's `nest:`. Together with
+   (1), every observed correct answer scored `subset`.
+3. **`must_not_contain` on `'%ike%'` DROPPED.** `scope: final` was tried first
+   (excludes the verification query) but a later run put the pattern in the
+   ANSWER PROSE ("I avoided `~ '%ike%'`…"), which no scope excludes. The guard
+   is redundant — query_shape already catches the contamination via wrong
+   revenues, and `expect_receipt` is the reliable discriminator (both stripped
+   runs produced no receipt; both real runs did). Regression coverage is now
+   query_shape + `expect_receipt` + `must_use`.
+
+**Evidence — four runs, real pass ×2 / stripped fail ×2** (once
+`must_not_contain` is removed): real #1/#2 both `query_shape: subset` +
+receipt; stripped #1/#2 both missing the AGT-1 receipt (and #2 also `none`).
+Not re-run live after dropping the guard — the four runs already isolate every
+check's behaviour, and re-running would only re-observe it (do NOT
+rerun-until-green). Results:
+`evals/results/selftest/2026-08-07T13-*.jsonl`.
+
+### EVAL-19 · `query_shape` grading never descends into a nested result · DONE 2026-08-07
 
 **The gap.** `compareResults` (`evals/lib/malloy.js`) compares only the
 top-level rows of the agent's result against gold. When the agent returns a
@@ -498,17 +520,18 @@ byte-identical to the 5-row gold, yet the case scored `none`. Same class as
 EVAL-9 (grader unsound against a legitimate answer shape), one dimension over:
 EVAL-9 was extra COLUMNS, this is a nested ROW SET.
 
-**Not yet fixed; scoped but not decided.** The plausible fix: in
-`gradeQueryShape`, treat each nested-array column as an additional candidate
-row set (flatten the nests across top-level rows) and keep the best match, so
-the ranked-tier machinery decides as usual. Guard against false positives the
-way `containsAll` already does (anchored matches only). NOTE this does NOT by
-itself fix `bike-name` — that run ALSO differs in projection (see EVAL-18's
-bike-name entry), so EVAL-19 is worth doing on its own merits (nested
-presentations are common and correct) but is not the whole story for that case.
-Needs a unit test pinning: a nested result whose nest equals gold matches at the
-nest's natural tier; a nested result whose nest does NOT equal gold still
-scores `none`.
+**Fixed.** `evals/lib/malloy.js` gained `candidateRowSets(rows)` (the top-level
+rows plus, for each column holding arrays of objects, the flattened nested row
+set — one level deep) and `bestMatch(agentRows, goldRows)` (strongest tier over
+those candidates, ranked so a new `compareResults` tier can't fall through).
+`gradeQueryShape` (`grade.js`) now calls `bestMatch` instead of `compareResults`.
+False positives are still bounded by `containsAll`'s anchoring. Five unit tests
+pin it, including the two that matter: a nest equal to gold matches at its
+natural tier (the bike-name shape → subset), and a nest that does NOT equal gold
+still scores `none`. As predicted this did NOT by itself fix `bike-name` (that
+run also differed in projection, and later in `must_not_contain` scope — see the
+bike-name entry), but nested presentations are common and correct, so it is
+worth having regardless.
 
 ---
 

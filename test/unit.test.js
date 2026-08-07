@@ -20,7 +20,8 @@ const assert = require('node:assert');
 
 const { porcelainPaths } = require('../evals/lib/identity');
 const {
-  compareResults, containsAll, stripImports, referencedSource, resolveModelFor,
+  compareResults, containsAll, candidateRowSets, bestMatch,
+  stripImports, referencedSource, resolveModelFor,
 } = require('../evals/lib/malloy');
 const { definedIn, listModelFiles } = require('../malloy-lib');
 const {
@@ -141,6 +142,51 @@ test('compareResults absorbs float noise but not real differences', () => {
 
 test('compareResults: an empty gold never passes', () => {
   assert.strictEqual(containsAll([{ v: 1 }], []), false);
+});
+
+// ---- nested results (EVAL-19) -----------------------------------------------
+// A correct answer presented as a summary row carrying a `nest:` of the real
+// rows must not score 'none' just because the ranking sits one level down.
+test('candidateRowSets: returns the flat rows plus each flattened nested row set', () => {
+  const rows = [{ total: 900, top: [{ name: 'a', rev: 5 }, { name: 'b', rev: 4 }] }];
+  const sets = candidateRowSets(rows);
+  assert.strictEqual(sets.length, 2);
+  assert.deepStrictEqual(sets[0], rows);
+  assert.deepStrictEqual(sets[1], [{ name: 'a', rev: 5 }, { name: 'b', rev: 4 }]);
+});
+
+test('candidateRowSets: flat rows with no nest yield only themselves', () => {
+  const rows = [{ rev: 5 }, { rev: 4 }];
+  assert.deepStrictEqual(candidateRowSets(rows), [rows]);
+});
+
+test('bestMatch: gold matches the nested row set (the bike-name shape)', () => {
+  // The agent wrapped the top-5 in a nest alongside a summary; gold is the
+  // revenue values only. subset: gold's revenue column is present in the nest,
+  // alongside the customer label the agent chose to show.
+  const agent = [{ bike_total: 79098, top_customers: [
+    { customer: 'Spencer Spencer', bike_revenue: 548.69 },
+    { customer: 'Harvey Barnes', bike_revenue: 506.12 },
+  ] }];
+  const gold = [{ bike_revenue: 548.69 }, { bike_revenue: 506.12 }];
+  assert.strictEqual(bestMatch(agent, gold), 'subset');
+});
+
+test('bestMatch: a nested row set that does NOT equal gold still scores none', () => {
+  // The false-positive guard: descending into a nest must not manufacture a
+  // match. Contaminated figures (different revenues) must fail.
+  const agent = [{ top_customers: [
+    { customer: 'x', bike_revenue: 999.00 },
+    { customer: 'y', bike_revenue: 888.00 },
+  ] }];
+  const gold = [{ bike_revenue: 548.69 }, { bike_revenue: 506.12 }];
+  assert.strictEqual(bestMatch(agent, gold), 'none');
+});
+
+test('bestMatch: with no nest it is exactly compareResults on the flat rows', () => {
+  const agent = [{ y: 2023, v: 1 }, { y: 2024, v: 2 }];
+  assert.strictEqual(bestMatch(agent, agent), 'exact');
+  assert.strictEqual(bestMatch([{ v: 1 }], [{ v: 2 }]), 'none');
 });
 
 // ---- query text handling ----------------------------------------------------

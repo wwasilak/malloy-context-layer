@@ -216,6 +216,46 @@ function compareResults(aRows, bRows) {
   return 'none';
 }
 
+// ---- nested results (EVAL-19) -----------------------------------------------
+// A Malloy `nest:` makes the agent's answer a summary row (or a few) each
+// carrying an ARRAY of sub-rows — e.g. `[{ total, top_customers: [ …5 rows… ] }]`.
+// That nested array is a result set the agent genuinely computed; query_shape
+// must be able to compare gold against it, or a correct answer presented as
+// summary+nest scores 'none'. This is EVAL-9's soundness gap one dimension over:
+// EVAL-9 was extra COLUMNS in a flat row, this is a nested ROW SET.
+//
+// Returns the agent's top-level rows PLUS, for each column that holds arrays of
+// objects, the flattened concatenation of those arrays across every row. One
+// level deep on purpose: it covers the common summary+nest shape without
+// unbounded descent, and the false-positive guards live in `containsAll`
+// (an anchored match is still required) — a nest that does not equal gold still
+// scores 'none'. A deeper nest is a reason to widen this, not to special-case it.
+function candidateRowSets(rows) {
+  const sets = [rows];
+  if (!rows || !rows.length) return sets;
+  const cols = [...new Set(rows.flatMap((r) => Object.keys(r)))];
+  for (const c of cols) {
+    const present = rows.map((r) => r[c]).filter((v) => v != null);
+    if (!present.length || !present.every((v) => Array.isArray(v))) continue; // not a nest column
+    const flat = present.flat().filter((v) => v && typeof v === 'object' && !Array.isArray(v));
+    if (flat.length) sets.push(flat);
+  }
+  return sets;
+}
+
+// Strongest match tier of gold against the agent's result, considering both the
+// flat rows and any nested row set (EVAL-19). Ranked, never special-cased, so a
+// new tier in compareResults cannot silently fall through here.
+function bestMatch(agentRows, goldRows) {
+  let best = 'none';
+  for (const cand of candidateRowSets(agentRows)) {
+    const cmp = compareResults(cand, goldRows);
+    if (MATCH_RANK[cmp] > MATCH_RANK[best]) best = cmp;
+    if (best === 'exact') break;
+  }
+  return best;
+}
+
 // How strong a match a case is willing to accept, weakest-first.
 const MATCH_RANK = { none: 0, subset: 1, values: 2, exact: 3 };
 
@@ -243,7 +283,7 @@ function runtimeVersions() {
 
 module.exports = {
   workdirFor, buildSourceIndex, runQuery, runAll, compareResults, canonRows,
-  containsAll, MATCH_RANK,
+  containsAll, candidateRowSets, bestMatch, MATCH_RANK,
   scalarFrom, referencedSource, stripImports, resolveModelFor, runtimeVersions,
   MODELS_DIR,
 };
