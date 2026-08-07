@@ -10,7 +10,8 @@
 #
 #   Usage: python3 okf_to_excel.py [kp_dir] [out.xlsx]
 # =============================================================================
-import sys, os, re
+import sys, os
+import yaml
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.worksheet.datavalidation import DataValidation
@@ -25,43 +26,40 @@ DOMAIN_TO_STEWARD = {'sales': 'Sales', 'finance': 'Finance',
                      'merchandising': 'Merchandising', 'operations': 'Retail Operations'}
 KINDS = {'entity', 'defined_class', 'measure', 'attribute'}
 
-# ---- read the bundle (frontmatter only; no external deps) -------------------
+# ---- read the bundle (real YAML frontmatter) --------------------------------
+# OKF-7: parse the frontmatter with yaml.safe_load rather than a line matcher,
+# so `verified`/`generated` come back as real dicts and `relationships` as a
+# list of dicts. The old hand-rolled parser stored raw strings and then had to
+# regex `at:` back out of the serialized `{ by, at }` mapping — a scrape coupled
+# to the exact spelling and broken by any value containing ',' or '}'.
 def frontmatter(path):
     t = open(path, encoding='utf-8').read()
     if not t.startswith('---'): return None
     end = t.index('\n---', 3)
-    fm, out, key = t[3:end].strip().split('\n'), {}, None
-    for line in fm:
-        m = re.match(r'^(\w+):\s*(.*)$', line)
-        if m:
-            key, val = m.group(1), m.group(2).strip()
-            out[key] = val
-        elif key and line.startswith('  '):
-            out.setdefault(key + '__nested', []).append(line)
-    return out
+    return yaml.safe_load(t[3:end]) or {}
 
-def unq(v):
-    v = (v or '').strip()
-    if v.startswith('"') and v.endswith('"'): v = v[1:-1].replace('\\"', '"')
-    return v
+def s(v):
+    """A scalar frontmatter value as a plain string (None -> '')."""
+    return '' if v is None else str(v)
 
-def unlist(v):
-    v = unq(v)
-    if v.startswith('[') and v.endswith(']'):
-        return ', '.join(x.strip().strip('"') for x in v[1:-1].split(',') if x.strip())
-    return v
+def joinlist(v):
+    """A list-valued field flattened to the sheet's comma-separated form."""
+    if isinstance(v, list): return ', '.join(str(x) for x in v)
+    return s(v)
 
-def flow_field(v, key):
-    """Pull `key` out of an inline flow mapping like '{ by: human:sales, at: 2026-07-15T00:00:00Z }'."""
-    m = re.search(key + r':\s*([^,}]+)', v or '')
-    return m.group(1).strip() if m else ''
+def at_of(v):
+    """The `at` date (YYYY-MM-DD) of a verified/generated entry. SPEC.md §5.2
+    allows a bare { by, at } mapping or a list of them; take the first. yaml
+    parses the timestamp to a datetime, whose str() starts with the ISO date."""
+    if isinstance(v, list): v = v[0] if v else None
+    if isinstance(v, dict) and v.get('at') is not None: return str(v['at'])[:10]
+    return ''
 
 concepts, relationships = [], []
 namespace = 'https://yourorg.example/kp#'
 cfg = os.path.join(KP, 'bundle.yaml')
 if os.path.exists(cfg):
-    m = re.search(r'namespace:\s*"?([^"\n]+)"?', open(cfg).read())
-    if m: namespace = m.group(1).strip()
+    namespace = (yaml.safe_load(open(cfg, encoding='utf-8')) or {}).get('namespace') or namespace
 
 for root, dirs, files in os.walk(KP):
     dirs[:] = [d for d in dirs if not d.startswith('_') and d != 'agent']
@@ -70,39 +68,32 @@ for root, dirs, files in os.walk(KP):
         d = frontmatter(os.path.join(root, fn))
         if not d or d.get('type') not in KINDS: continue
         domain = os.path.relpath(root, KP).split(os.sep)[0]
-        steward = unq(d.get('steward', '')) or DOMAIN_TO_STEWARD.get(domain, '')
-        status = STATUS_OUT.get(unq(d.get('status', 'draft')), 'Draft')
+        steward = s(d.get('steward')) or DOMAIN_TO_STEWARD.get(domain, '')
+        status = STATUS_OUT.get(s(d.get('status')) or 'draft', 'Draft')
         # governance now lives in `verified` (a human: actor), not `status` alone —
         # only a verified concept gets an 'Approved by' / 'Approved on' back in the sheet.
-        verified_at = flow_field(d.get('verified', ''), 'at')
-        generated_at = flow_field(d.get('generated', ''), 'at')
+        verified_at = at_of(d.get('verified'))
+        generated_at = at_of(d.get('generated'))
         c = {
-            'URI': unq(d.get('uri')), 'Label': unq(d.get('title')), 'Kind': d.get('type'),
-            'Definition': unq(d.get('description')), 'Synonyms': unlist(d.get('synonyms', '')),
+            'URI': s(d.get('uri')), 'Label': s(d.get('title')), 'Kind': d.get('type'),
+            'Definition': s(d.get('description')), 'Synonyms': joinlist(d.get('synonyms')),
             'Steward': steward,
-            'Subtype of': unq(d.get('subtype_of', '')), 'Of (entity)': unq(d.get('of', '')),
-            'Membership rule': unq(d.get('membership_rule', '')),
-            'Preferred source': unq(d.get('preferred_source', '')),
-            'Allowed roles': unlist(d.get('allowed_roles', '')),
+            'Subtype of': s(d.get('subtype_of')), 'Of (entity)': s(d.get('of')),
+            'Membership rule': s(d.get('membership_rule')),
+            'Preferred source': s(d.get('preferred_source')),
+            'Allowed roles': joinlist(d.get('allowed_roles')),
             'Approval status': status,
             'Approved by': steward if verified_at else '',
             'Approved on': (verified_at or generated_at)[:10],
-            'Validation status': unq(d.get('validation_status', '')).capitalize() or 'Not started',
-            'Checked against': unq(d.get('checked_against', '')),
-            'Validation notes': unq(d.get('validation_notes', '')),
+            'Validation status': s(d.get('validation_status')).capitalize() or 'Not started',
+            'Checked against': s(d.get('checked_against')),
+            'Validation notes': s(d.get('validation_notes')),
         }
         concepts.append(c)
-        for i, line in enumerate(d.get('relationships__nested', [])):
-            m = re.match(r'\s*-\s*uri:\s*(\S+)', line)
-            if m:
-                verb = rng = ''
-                for l2 in d['relationships__nested'][i+1:i+3]:
-                    mv = re.match(r'\s*verb:\s*(.*)', l2); mr = re.match(r'\s*range:\s*(\S+)', l2)
-                    if mv: verb = unq(mv.group(1))
-                    if mr: rng = mr.group(1)
-                relationships.append({'URI': m.group(1), 'Verb phrase': verb,
-                                      'From (domain)': unq(d.get('uri')), 'To (range)': rng,
-                                      'Approval status': STATUS_OUT.get(unq(d.get('status','draft')),'Draft')})
+        for rel in (d.get('relationships') or []):
+            relationships.append({'URI': s(rel.get('uri')), 'Verb phrase': s(rel.get('verb')),
+                                  'From (domain)': s(d.get('uri')), 'To (range)': s(rel.get('range')),
+                                  'Approval status': STATUS_OUT.get(s(d.get('status')) or 'draft', 'Draft')})
 
 kind_order = {'entity': 0, 'defined_class': 1, 'measure': 2, 'attribute': 3}
 concepts.sort(key=lambda c: (kind_order[c['Kind']], c['URI']))
