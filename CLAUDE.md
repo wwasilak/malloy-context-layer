@@ -23,7 +23,9 @@ verified: { by: human:knowledge-plane, at: 2026-08-06T00:00:00Z }
   the measure by hand.
 - **`kp/agent/`** — operational docs: `examples.md` (copy these query shapes),
   `gap-log.md`, `question-log.md`, `corrections.md` (check Standing hints
-  before answering), `evals/`.
+  before answering). Eval regression cases live under `evals/cases/` (harness
+  fixtures, outside this tree — not a routing input; do not consult them to
+  answer a question).
 
 ## Routing: question -> answer
 
@@ -246,8 +248,10 @@ term is NOT in the routing table*.
 
 **What you may write.** Only `kp/agent/gap-log.md`, `kp/agent/question-log.md`,
 `kp/agent/corrections.md`, and — when explicitly asked — a case under
-`kp/agent/evals/`. Never write to `models/`: not a query file, not a scratch
-file, not a temporary one. Models are governed implementation and the build
+`evals/cases/`. `evals/` is harness code — never write anywhere else under it
+(not `evals/run.js`, not `evals/lib/`, not `evals/results/`); the sole exception
+is a case file under `evals/cases/`, and only when explicitly asked. Never write
+to `models/`: not a query file, not a scratch file, not a temporary one. Models are governed implementation and the build
 gates on them; compose queries inline instead. Never edit a concept file —
 meaning changes go through a reviewed PR by the steward. When you add a query
 shape to `examples.md`, compile it first: an example that does not compile

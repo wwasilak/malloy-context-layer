@@ -24,7 +24,7 @@ is only as good as the eval loop that continuously tests it. Without this, every
 The failure modes we have already SEEN in real sessions (freeze these as cases):
 1. Re-deriving a governed concept from components (`sum(line_revenue-line_cost)`
    instead of `kp:Margin`) and defending it as allowed. See
-   `kp/agent/evals/no-rederivation-margin.md`.
+   `evals/cases/no-rederivation-margin.md`.
 2. Naive projection that is silently wrong when relative time isn't anchored to
    the data's max date (the 2024 forecast session).
 Both are regression cases the runner must catch.
@@ -35,7 +35,7 @@ Both are regression cases the runner must catch.
 
 ### Eval case format (already in use, extend it)
 
-Cases live in `kp/agent/evals/*.md`: YAML frontmatter + a prose body explaining
+Cases live in `evals/cases/*.md`: YAML frontmatter + a prose body explaining
 intent. Current fields (see `aov-synonym.md`, `no-rederivation-margin.md`):
 
 ```yaml
@@ -64,7 +64,7 @@ so it can't drift):
 ### Runner architecture (`evals/run.js`, ~150 lines)
 
 ```
-for each kp/agent/evals/*.md:
+for each evals/cases/*.md:
   1. parse frontmatter (gray-matter — already a dep)
   2. invoke the agent headless with `question` as the only user turn:
        claude -p "<question>" --output-format json   (Claude Code headless)
@@ -237,7 +237,7 @@ EVAL-3 row and into the provenance footer (AGT-1) so a stakeholder can later ask
 
 ## Acceptance
 
-- `npm run eval` runs all `kp/agent/evals/*.md`, N=3 each, against fixtures.
+- `npm run eval` runs all `evals/cases/*.md`, N=3 each, against fixtures.
 - Produces `evals/results/<ts>.jsonl` with the EVAL-3 schema incl.
   semantic_identity.
 - `evals/report.js` prints pass-rate by category and pass→fail flips vs previous.

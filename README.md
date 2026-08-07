@@ -43,7 +43,7 @@ Two artifacts in git, one build command, links between them:
   loop shows the agent actually *uses* it: routes to the right concept, applies
   membership rules verbatim, refuses ungoverned terms, and does not quietly
   re-derive a governed measure from raw columns. Cases live in
-  `kp/agent/evals/`, results are JSONL stamped with a semantic identity hash, so
+  `evals/cases/`, results are JSONL stamped with a semantic identity hash, so
   a number that moves can be attributed to the data or to the meaning.
 
 The result is an executable model that is also its own conceptual documentation,

@@ -216,7 +216,7 @@ function writeBack(dir, { canon }, implementations, sourceConcepts = {}, extras 
   }
   rootLines.push('', 'Domains: ' + Object.keys(byDomain).sort().map(d => `[${d}](./${d}/index.md)`).join(' · '));
   if (fs.existsSync(path.join(dir, 'agent')))
-    rootLines.push('', 'Operational: [examples](./agent/examples.md) · [gap log](./agent/gap-log.md) · [question log](./agent/question-log.md) · [corrections](./agent/corrections.md) · [evals](./agent/evals/)');
+    rootLines.push('', 'Operational: [examples](./agent/examples.md) · [gap log](./agent/gap-log.md) · [question log](./agent/question-log.md) · [corrections](./agent/corrections.md)');
   rootLines.push('');
   fs.writeFileSync(path.join(dir, 'index.md'), rootLines.join('\n'));
   return touched;
