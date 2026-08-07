@@ -70,6 +70,10 @@ const EXEMPT = {
   'refusal-routing-decision':
     'the whole right answer is "CLV is absent from the routing table", and the harness injects that table — ' +
     'so the answer is readable off the prompt with any protocol. It also produces no figure, hence no receipt to assert.',
+  'refusal-returns-not-in-data':
+    'data absence, not governance absence: no returns table/field/proxy exists anywhere in the schema, which is ' +
+    'verifiable from one compile regardless of protocol — same class as refusal-routing-decision. It also produces ' +
+    'no figure, hence no receipt to assert.',
 };
 
 const run = (args) => spawnSync(process.execPath, [path.join('evals', 'run.js'), ...args], {

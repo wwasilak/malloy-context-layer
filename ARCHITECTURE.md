@@ -86,8 +86,9 @@ after build (forces committed write-back). CODEOWNERS per domain folder.
 
 The build proves the plane is internally consistent. It cannot prove the agent
 routes correctly, applies membership rules verbatim, refuses ungoverned terms,
-or returns the right number — that is this. Cases are `kp/agent/evals/*.md`
-(operational docs, skipped by the concept registry); the runner feeds each
+or returns the right number — that is this. Cases are `evals/cases/*.md`
+(harness fixtures, outside the `kp/` tree so the agent under test can't read
+its own answer key — EVAL-18); the runner feeds each
 `question` to headless Claude Code in the repo root, so the shipped `CLAUDE.md`
 and `kp/` are what gets tested, not a stub.
 

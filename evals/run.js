@@ -2,7 +2,7 @@
 // =============================================================================
 // run.js — EVAL-1: the eval runner.
 //
-//   Loop every case in kp/agent/evals/ through the agent under test, grade the
+//   Loop every case in evals/cases/ through the agent under test, grade the
 //   answer AND the route it took, and write a provenance-stamped result row per
 //   (case x run). Exits non-zero on any failing case so CI can gate on it.
 //
@@ -179,7 +179,17 @@ process.on('uncaughtException', (e) => { restoreNow(); console.error('FATAL:', e
   // identity — and `--select` would then be entitled to skip a real case on the
   // strength of a run that used the wrong rules. `assertActive` below turns a
   // future reordering into a loud failure instead of that.
-  if (args.protocol) restoreProtocol = protocol.swapIn(args.protocol);
+  //
+  // EVAL-16: hide the operational docs in the SAME step. They are standing
+  // hints CLAUDE.md itself tells the agent to consult, reachable by plain
+  // Read/Glob whether or not CLAUDE.md is swapped — a stripped run that could
+  // still read `corrections.md` was answering off the real protocol's own
+  // worked answers.
+  if (args.protocol) {
+    const restoreClaudeMd = protocol.swapIn(args.protocol);
+    const restoreDocs = protocol.hideOperationalDocs();
+    restoreProtocol = () => { restoreDocs(); restoreClaudeMd(); };
+  }
 
   const cases = loadCases(undefined, args.case);
   const broken = cases.filter((c) => c.errors && c.errors.length);
@@ -401,7 +411,14 @@ process.on('uncaughtException', (e) => { restoreNow(); console.error('FATAL:', e
       // lanes, and a prose sentence is not a comparison key.
       kind_pass: g.kind_pass ?? null,
       match_tiers: g.matches ? g.matches.map((m) => m.match) : null,
-      agent_answer_excerpt: String(res.answer || '').slice(0, 1200),
+      // `receipt_present`/`expect_receipt` above are graded against the FULL
+      // `res.answer`, so this excerpt never affects a verdict — but a 1200-char
+      // cap cut it off mid-receipt on `bike-name-match-contamination`
+      // (2026-08-06), leaving nothing in the stored row a later audit could
+      // read to confirm what the boolean already decided. 6000 covers a
+      // receipt-bearing answer with room to spare; a truncated audit trail is
+      // its own kind of silent wrong answer (AGT-1).
+      agent_answer_excerpt: String(res.answer || '').slice(0, 6000),
       executed_malloy: (res.executedMalloy || []).join('\n---\n').slice(0, 4000),
       extracted_value: g.extracted,
       expect_value: c.expect_value,

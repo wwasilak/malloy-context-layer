@@ -68,16 +68,62 @@ function findLoose(hay, needle, pad = 100) {
 
 // What the agent COMMITTED to, labelled so a match points at an artifact rather
 // than at an undifferentiated blob of trace.
-function committedSegments(run) {
-  return [
-    { where: 'final_answer', text: run.answer || '' },
-    ...(run.executedMalloy || []).map((q, i) => ({ where: `executed_malloy[${i}]`, text: q })),
-  ];
+//
+// scope: 'all' (default) — every executed query, plus the final answer. Right
+//   for a pattern that must never be true regardless of WHY a query ran (e.g.
+//   re-deriving a governed measure from raw columns is wrong even as a
+//   discarded check).
+// scope: 'final' — the final answer plus only the LAST executed query. For a
+//   pattern that a legitimate VERIFICATION query may touch on the way to the
+//   right answer (e.g. checking a standing hint by grouping on the very field
+//   the final answer must not group by) — 'all' would fail correct diligence,
+//   which is the opposite of what must_not_contain exists to catch (found
+//   2026-08-06 harvesting north-america-qoq-channel and
+//   online-delivery-delay-by-country: EVAL-7's "exploration is not
+//   commitment" already covers compiles; this extends it to a query that WAS
+//   executed but was not the one the answer is drawn from).
+function committedSegments(run, scope = 'all') {
+  const executed = run.executedMalloy || [];
+  const queries = scope === 'final' && executed.length
+    ? [{ where: `executed_malloy[${executed.length - 1}]`, text: executed[executed.length - 1] }]
+    : executed.map((q, i) => ({ where: `executed_malloy[${i}]`, text: q }));
+  return [{ where: 'final_answer', text: run.answer || '' }, ...queries];
 }
 
 // The AGT-1 provenance footer.
 const RECEIPT_RE = /basis\s*:.*\|\s*freshness\s*:/is;
-const hasReceipt = (answer) => RECEIPT_RE.test(String(answer || ''));
+// EVAL-17: a receipt written as CLAUDE.md's own example formats it —
+// `**Basis:** … | **Freshness:** …` — puts markdown emphasis between the `|`
+// and `freshness`, which `\s*` does not cover. Strip emphasis markers before
+// matching rather than special-casing them into the regex: a receipt should be
+// graded on its CONTENT, not on whether the agent bolded it (found 2026-08-06,
+// two real receipts in the harvest audit graded absent).
+const stripMarkdownEmphasis = (s) => String(s || '').replace(/[*_`]/g, '');
+const hasReceipt = (answer) => RECEIPT_RE.test(stripMarkdownEmphasis(answer));
+
+// EVAL-17, second half: `run.answer` is only the CLI's LAST result message.
+// CLAUDE.md requires a post-answer question-log write, the eval sandbox
+// deliberately denies Write/Edit (so a sweep cannot dirty the tree), and an
+// agent that tries anyway often spends its final turn apologising for the
+// blocked write instead of restating the receipted answer it already gave —
+// orphaning a genuinely correct receipt one turn back (found 2026-08-06,
+// discount-band-per-order and north-america-qoq-channel).
+//
+// The first fix here checked one blob of every turn's prose concatenated —
+// but RECEIPT_RE is unanchored and dot-all, so "basis" surviving from turn 3
+// and an unrelated "freshness" three turns later (with some stray markdown-
+// table pipe sitting between them) can combine into a receipt that was never
+// actually written. Confirmed live: three cases started passing the STRIPPED
+// protocol on the very re-audit meant to confirm the fix (2026-08-06) — the
+// broadening didn't just recover the orphaned receipt, it manufactured ones.
+// A receipt is a commitment made WITHIN one message, so check each assistant
+// message independently and require the whole pattern inside a SINGLE one —
+// still broad like must_use (any turn counts), never stitched across turns
+// like the bug that produced this fix.
+function receiptPresent(run) {
+  const parts = run.textParts && run.textParts.length ? run.textParts : [run.answer];
+  return parts.some((p) => hasReceipt(p));
+}
 
 // Drop the receipt before hunting for the headline figure — it ends in a date
 // and a steward name, and "2024-12-31" is not the answer to anything.
@@ -233,7 +279,7 @@ function crossChecks(caseDef, run) {
   // definition is likewise not re-deriving it: `average_order_value` is defined
   // in the model as `total_sales / order_count`, so compile output echoes the
   // forbidden expression back at an agent that did exactly the right thing.
-  const committed = committedSegments(run);
+  const committed = committedSegments(run, caseDef.must_not_contain_scope);
 
   for (const uri of caseDef.must_use) {
     if (!containsLoose(trace, uri))
@@ -256,7 +302,7 @@ function crossChecks(caseDef, run) {
     }
   }
 
-  if (caseDef.expect_receipt && !hasReceipt(run.answer))
+  if (caseDef.expect_receipt && !receiptPresent(run))
     failures.push({ check: 'expect_receipt', message: 'missing AGT-1 provenance receipt (Basis: … | Freshness: …)' });
 
   // AGT-3: where the correct answer is a routing DECISION, spending queries on
@@ -351,12 +397,12 @@ async function grade(caseDef, run, ctx) {
     matches: kindResult.matches || null,
     detail,
     extracted,
-    receipt_present: hasReceipt(run.answer),
+    receipt_present: receiptPresent(run),
     cross_checks: xs,
   };
 }
 
 module.exports = {
-  grade, extractNumber, hasReceipt, crossChecks, containsLoose, findLoose,
+  grade, extractNumber, hasReceipt, receiptPresent, crossChecks, containsLoose, findLoose,
   committedSegments, withinTolerance, REFUSAL_MARKERS,
 };

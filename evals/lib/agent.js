@@ -178,7 +178,7 @@ function extract(messages) {
     : null;
 
   return {
-    answer, traceText, authoredText, toolCalls, executedMalloy, tokens, usage,
+    answer, traceText, authoredText, textParts, toolCalls, executedMalloy, tokens, usage,
     cost_usd: costUsd, agent_duration_ms: durationMs, num_turns: numTurns,
     session_id: sessionId, error: errorSubtype,
     malloy_tool_calls: toolCalls.filter((t) => MALLOY_TOOLS.has(t.name)).length,

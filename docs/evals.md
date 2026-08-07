@@ -39,8 +39,10 @@ Malloy MCP server the agent uses to run queries.
 
 ## Writing a case
 
-Cases are markdown with YAML frontmatter in `kp/agent/evals/`. `type: eval`
-makes them operational docs, so `okf-lib` skips them in the concept registry.
+Cases are markdown with YAML frontmatter in `evals/cases/` — deliberately
+OUTSIDE the `kp/` tree the agent under test explores, so a run cannot read its
+own gold query and reasoning off disk (EVAL-18). `type: eval` in the
+frontmatter marks them for the runner.
 The body is intent for humans and is never graded.
 
 ```yaml
@@ -624,9 +626,20 @@ Three properties it has to hold, each because of a specific way it could lie:
   selftest would certify a harness it never exercised.
 
 The run refuses to start if `CLAUDE.md` has uncommitted changes, or if a
-`CLAUDE.md.protocol-backup` is left over from an interrupted run — that file is
-somebody's real protocol, and writing a new backup over it destroys the only
-copy.
+backup is left over from an interrupted run — that file is somebody's real
+protocol, and writing a new backup over it destroys the only copy.
+
+**The backup lives outside the repo (EVAL-15), not at
+`<repo-root>/CLAUDE.md.protocol-backup`.** It used to sit there, inside the
+working tree the agent under test explores with `Read`/`Glob` during the
+stripped-protocol phase — so an agent that looked found the real protocol one
+tool call away and could follow it instead of the scratch prompt it was meant
+to be limited to (confirmed live in a 2026-08-06 harvest run). `swapIn`/`guard`
+now default `backupFile` to a path under the OS temp directory, keyed by a
+hash of the protocol file's own resolved path (`protocol.js`'s
+`defaultBackupFile`) — stable across runs of the same repo, so the
+leftover-backup guard above still finds a crashed run's backup, but not
+sitting anywhere an agent exploring the repo would think to look.
 
 ## CI
 

@@ -71,4 +71,4 @@ the actor) are governed. If a term is not here, it is NOT modelled.
 
 Domains: [finance](./finance/index.md) · [global](./global/index.md) · [merchandising](./merchandising/index.md) · [operations](./operations/index.md) · [sales](./sales/index.md)
 
-Operational: [examples](./agent/examples.md) · [gap log](./agent/gap-log.md) · [question log](./agent/question-log.md) · [corrections](./agent/corrections.md) · [evals](./agent/evals/)
+Operational: [examples](./agent/examples.md) · [gap log](./agent/gap-log.md) · [question log](./agent/question-log.md) · [corrections](./agent/corrections.md)

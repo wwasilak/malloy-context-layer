@@ -28,6 +28,7 @@ const {
 } = require('../evals/lib/tier1');
 const { transportErrorOf } = require('../evals/lib/agent');
 const { loadCase, DEFAULT_TIER } = require('../evals/lib/cases');
+const { committedSegments, crossChecks, hasReceipt, receiptPresent } = require('../evals/lib/grade');
 const {
   correlate, classify, laneVerdict, verdictFor, reasonKey, provenanceProblems, CLASS,
 } = require('../evals/lib/correlate');
@@ -371,13 +372,13 @@ test('a tier-1 run that needs no repair makes exactly one call', async () => {
 // ---- case tiers --------------------------------------------------------------
 test('a case defaults to tier 2, so nothing becomes cheap by accident', () => {
   assert.strictEqual(DEFAULT_TIER, 2);
-  const c = loadCase('kp/agent/evals/no-rederivation-margin.md');
+  const c = loadCase('evals/cases/no-rederivation-margin.md');
   assert.strictEqual(c.tier, 2);
 });
 
 test('a declared tier is honoured, and an unknown one is an error', () => {
-  assert.strictEqual(loadCase('kp/agent/evals/aov-synonym.md').tier, 1);
-  assert.strictEqual(loadCase('kp/agent/evals/membership-verbatim.md').tier, 2);
+  assert.strictEqual(loadCase('evals/cases/aov-synonym.md').tier, 1);
+  assert.strictEqual(loadCase('evals/cases/membership-verbatim.md').tier, 2);
 });
 
 // ---- what counts as a cross-check (EVAL-10, tightened by SIMP-5) -------------
@@ -409,10 +410,114 @@ test('an analysis case with no cross-check at all is still rejected', () => {
   assert.match(analysisCase('category: x').errors[0], /passes unconditionally/);
 });
 
+// ---- EVAL-17: receipt detection survives markdown and a denied write -------
+test('hasReceipt tolerates markdown emphasis around the receipt fields', () => {
+  const plain = 'Basis: kp:TotalSales (governed) | Freshness: 2024-04-20 | Steward: global';
+  const bold = '**Basis:** kp:TotalSales (governed) | **Freshness:** 2024-04-20 | **Steward:** global';
+  assert.ok(hasReceipt(plain));
+  assert.ok(hasReceipt(bold), 'a receipt bolded exactly as CLAUDE.md\'s own examples format it must still be detected');
+});
+
+test('receiptPresent finds a receipt given in an earlier turn, not lost to a later meta-message', () => {
+  // The failure mode: CLAUDE.md requires a post-answer question-log write, the
+  // eval sandbox denies Write, and the agent's FINAL message ends up being
+  // "I couldn't log this" instead of the receipted answer it already gave.
+  const run = {
+    answer: "I couldn't append to question-log.md — no write access this session.",
+    textParts: [
+      'Basis: kp:TotalSales (governed) | Freshness: 2024-04-20 | Steward: global',
+      "I couldn't append to question-log.md — no write access this session.",
+    ],
+  };
+  assert.ok(!hasReceipt(run.answer), 'the sanity check: the final message alone has no receipt');
+  assert.ok(receiptPresent(run), 'the receipt given earlier in the same run must still count');
+});
+
+test('receiptPresent does NOT stitch turns together — a "basis" in one message and an unrelated "freshness" in another must not combine into a receipt neither message actually contains', () => {
+  // The bug the fix above introduced: concatenating every turn into one blob
+  // let RECEIPT_RE's unanchored, dot-all pattern match ACROSS messages.
+  // Confirmed live 2026-08-06: three stripped-protocol runs started passing
+  // once the (over-broadened) fix shipped, though none of them ever wrote a
+  // real receipt.
+  const run = {
+    answer: 'wrapping up now',
+    textParts: [
+      'The basis for this calculation is the raw order table.',
+      '| category | count |\n|---|---|\n| bikes | 12 |',
+      'Data freshness: unclear, this session has no governance context.',
+      'wrapping up now',
+    ],
+  };
+  assert.ok(!receiptPresent(run), 'no single message contains a real receipt, so this must not pass');
+});
+
+test('crossChecks expect_receipt uses receiptPresent, not the bare final answer', () => {
+  const caseDef = { must_use: [], must_not_contain: [], expect_receipt: true, max_malloy_calls: null };
+  const run = {
+    answer: "I couldn't append to question-log.md — no write access this session.",
+    textParts: [
+      'Basis: kp:TotalSales (governed) | Freshness: 2024-04-20 | Steward: global',
+      "I couldn't append to question-log.md — no write access this session.",
+    ],
+    traceText: '',
+    executedMalloy: [],
+  };
+  assert.deepStrictEqual(crossChecks(caseDef, run).filter((f) => f.check === 'expect_receipt'), []);
+});
+
+// ---- must_not_contain_scope (case-authoring fix found harvesting EVAL-5) ----
+// north-america-qoq-channel and online-delivery-delay-by-country both ran a
+// legitimate VERIFICATION query (checking a standing hint) that happened to
+// touch the exact field the FINAL answer must not group by, and the default
+// 'all' scope treated that diligence as if it were the mistake.
+test('committedSegments scope all includes every executed query', () => {
+  const run = { answer: 'final prose', executedMalloy: ['run: a -> {}', 'run: b -> {}'] };
+  const segs = committedSegments(run, 'all');
+  assert.deepStrictEqual(segs.map((s) => s.where), ['final_answer', 'executed_malloy[0]', 'executed_malloy[1]']);
+});
+
+test('committedSegments scope final keeps only the last executed query', () => {
+  const run = { answer: 'final prose', executedMalloy: ['run: verification -> {}', 'run: final -> {}'] };
+  const segs = committedSegments(run, 'final');
+  assert.deepStrictEqual(segs.map((s) => s.where), ['final_answer', 'executed_malloy[1]']);
+  assert.strictEqual(segs[1].text, 'run: final -> {}');
+});
+
+test('a forbidden pattern in an EARLIER verification query does not fail must_not_contain under scope final', () => {
+  const caseDef = {
+    must_use: [], must_not_contain: ['placed_at.CountryName'], must_not_contain_scope: 'final',
+    expect_receipt: false, max_malloy_calls: null,
+  };
+  const run = {
+    answer: 'the answer, using placed_by.Country as the standing hint requires',
+    traceText: '',
+    executedMalloy: ['run: sales_order -> { group_by: placed_at.CountryName }', 'run: sales_order -> { group_by: placed_by.Country }'],
+  };
+  const failures = crossChecks(caseDef, run);
+  assert.deepStrictEqual(failures.filter((f) => f.check === 'must_not_contain'), []);
+});
+
+test('the same forbidden pattern still fails must_not_contain under the default scope all', () => {
+  const caseDef = { must_use: [], must_not_contain: ['placed_at.CountryName'], expect_receipt: false, max_malloy_calls: null };
+  const run = {
+    answer: 'the answer',
+    traceText: '',
+    executedMalloy: ['run: sales_order -> { group_by: placed_at.CountryName }', 'run: sales_order -> { group_by: placed_by.Country }'],
+  };
+  const failures = crossChecks(caseDef, run);
+  assert.strictEqual(failures.filter((f) => f.check === 'must_not_contain').length, 1);
+});
+
+test('must_not_contain_scope defaults to all and validates its value', () => {
+  assert.strictEqual(analysisCase('expect_receipt: true').must_not_contain_scope, 'all');
+  assert.strictEqual(analysisCase('expect_receipt: true\nmust_not_contain_scope: final').must_not_contain_scope, 'final');
+  assert.match(analysisCase('expect_receipt: true\nmust_not_contain_scope: nope').errors[0], /unknown must_not_contain_scope/);
+});
+
 test('both committed analysis cases now discriminate', () => {
   // The regression: financial-situation-projection shipped with must_use only.
   for (const name of ['financial-situation-projection', 'no-rederivation-margin']) {
-    const c = loadCase(`kp/agent/evals/${name}.md`);
+    const c = loadCase(`evals/cases/${name}.md`);
     assert.deepStrictEqual(c.errors, [], `${name} must load clean`);
     assert.ok(c.must_not_contain.length || c.expect_receipt,
       `${name} needs a cross-check the model files cannot satisfy on its behalf`);
@@ -798,7 +903,10 @@ test('a skipped-case record can never be read back as a measurement of itself', 
 // This is the only code in the harness that rewrites a tracked file, so the
 // failure everything here guards against is leaving someone's CLAUDE.md
 // replaced by a scratch prompt.
-const { swapIn, guard, assertActive, sha256: protoSha } = require('../evals/lib/protocol');
+const {
+  swapIn, guard, assertActive, hideFile, hideOperationalDocs,
+  sha256: protoSha, defaultBackupFile,
+} = require('../evals/lib/protocol');
 
 function protoFixture() {
   const dir = fs.mkdtempSync(nodePath.join(os.tmpdir(), 'kp-protocol-'));
@@ -853,6 +961,71 @@ test('guard passes on a clean tree it cannot inspect', () => {
   assert.doesNotThrow(() => guard(f.opts));
 });
 
+// ---- EVAL-16: hiding the operational docs, not just CLAUDE.md --------------
+test('hideFile removes the file entirely and restore puts it back byte-identical', () => {
+  const f = protoFixture();
+  const doc = nodePath.join(f.dir, 'corrections.md');
+  fs.writeFileSync(doc, '# a standing hint that states the answer\n');
+  const restore = hideFile(doc);
+  assert.ok(!fs.existsSync(doc), 'the file must not be discoverable while hidden');
+  restore();
+  assert.strictEqual(fs.readFileSync(doc, 'utf8'), '# a standing hint that states the answer\n');
+});
+
+test('hideFile on a file that does not exist is a no-op restore, not an error', () => {
+  const f = protoFixture();
+  const restore = hideFile(nodePath.join(f.dir, 'nope.md'));
+  assert.strictEqual(restore(), false);
+});
+
+test('hideOperationalDocs hides every present doc and restores all of them together', () => {
+  const f = protoFixture();
+  const a = nodePath.join(f.dir, 'corrections.md');
+  const b = nodePath.join(f.dir, 'question-log.md');
+  fs.writeFileSync(a, '# corrections\n');
+  fs.writeFileSync(b, '# question log\n');
+  const restore = hideOperationalDocs([a, b]);
+  assert.ok(!fs.existsSync(a) && !fs.existsSync(b), 'both must be hidden');
+  restore();
+  assert.strictEqual(fs.readFileSync(a, 'utf8'), '# corrections\n');
+  assert.strictEqual(fs.readFileSync(b, 'utf8'), '# question log\n');
+});
+
+test('hideOperationalDocs guards every file BEFORE hiding any of them', () => {
+  // A leftover backup on the SECOND file must not leave the first one already
+  // moved aside with no restore triggered — the atomic-guard property.
+  const f = protoFixture();
+  const a = nodePath.join(f.dir, 'corrections.md');
+  const b = nodePath.join(f.dir, 'question-log.md');
+  fs.writeFileSync(a, '# corrections\n');
+  fs.writeFileSync(b, '# question log\n');
+  fs.writeFileSync(defaultBackupFile(b), '# a previous run did not clean up\n');
+  assert.throws(() => hideOperationalDocs([a, b]), /did not clean up/);
+  assert.ok(fs.existsSync(a), 'the first file must still be in place after the refusal');
+  fs.unlinkSync(defaultBackupFile(b));
+});
+
+test('EVAL-15: the default backup path is outside the protocol file\'s own directory', () => {
+  // The bug: the backup used to sit at <repo-root>/CLAUDE.md.protocol-backup,
+  // inside the tree the agent under test explores with Read/Glob during a
+  // stripped-protocol run. An agent that looked found the real protocol and
+  // followed it instead of the scratch prompt it was supposed to be limited
+  // to. The fix must put the backup somewhere that listing the protocol
+  // file's own directory does not reveal.
+  const f = protoFixture();
+  const backup = defaultBackupFile(f.real);
+  assert.notStrictEqual(nodePath.dirname(backup), nodePath.dirname(f.real),
+    'the backup must not live in the same directory as the protocol file it is backing up');
+});
+
+test('EVAL-15: the default backup path is stable across calls, so a crashed run is still detected', () => {
+  // guard() needs to find a leftover backup from a PRIOR crashed run at the
+  // SAME path, or the leftover-backup protection silently stops working the
+  // moment the location moved out of the repo.
+  const f = protoFixture();
+  assert.strictEqual(defaultBackupFile(f.real), defaultBackupFile(f.real));
+});
+
 test('assertActive catches an identity computed BEFORE the swap', () => {
   // The ordering bug this exists for: results stamped with the shipped
   // protocol's identity while a scratch protocol was actually in force. Those
@@ -873,17 +1046,29 @@ test('assertActive catches an identity computed BEFORE the swap', () => {
 // Safe to fail: swapIn refuses to start unless CLAUDE.md is committed, so
 // `git checkout CLAUDE.md` always recovers. The test self-skips when it cannot
 // run safely rather than reporting a pass it did not earn.
-test('run.js restores CLAUDE.md when a --protocol run crashes', (t) => {
+test('run.js restores CLAUDE.md and the operational docs when a --protocol run crashes', (t) => {
   const { spawnSync } = require('node:child_process');
+
+  // EVAL-15 moved the backup out of the repo root (see the tests above), so
+  // this is the OS-temp path run.js will actually use for this repo's own
+  // CLAUDE.md — not the old repo-root literal. EVAL-16 hides the operational
+  // docs the same way, so this run's crash-recovery path exercises both.
+  const backupPath = defaultBackupFile('CLAUDE.md');
+  const docPaths = ['corrections.md', 'question-log.md', 'gap-log.md', 'examples.md']
+    .map((f) => nodePath.join('kp', 'agent', f));
+  const docBackups = docPaths.map(defaultBackupFile);
 
   // A leftover backup makes the guard refuse, which would send this test down a
   // "cannot run" path. It must NOT be treated as a skip: the file is somebody's
-  // real CLAUDE.md stranded by a crashed run, and staying quiet about it is how
-  // this test silently stopped testing anything. Fail loudly and say what to do.
-  assert.ok(!fs.existsSync('CLAUDE.md.protocol-backup'),
-    'CLAUDE.md.protocol-backup exists — a --protocol run was interrupted. Restore it over CLAUDE.md and delete it before running the suite.');
+  // real CLAUDE.md (or corrections.md, etc.) stranded by a crashed run, and
+  // staying quiet about it is how this test silently stopped testing anything.
+  // Fail loudly and say what to do.
+  for (const p of [backupPath, ...docBackups])
+    assert.ok(!fs.existsSync(p),
+      `${p} exists — a --protocol run was interrupted. Restore it over its original and delete it before running the suite.`);
 
   const before = fs.readFileSync('CLAUDE.md');
+  const docsBefore = docPaths.map((p) => (fs.existsSync(p) ? fs.readFileSync(p) : null));
   const alt = nodePath.join(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'kp-wire-')), 'alt.md');
   fs.writeFileSync(alt, '# a scratch protocol\n');
 
@@ -896,12 +1081,17 @@ test('run.js restores CLAUDE.md when a --protocol run crashes', (t) => {
   // Report it as SKIPPED, never as passed — the whole lesson of this branch.
   if (/uncommitted changes/.test(output)) {
     assert.deepStrictEqual(fs.readFileSync('CLAUDE.md'), before, 'a refused swap must touch nothing');
-    return t.skip('CLAUDE.md has uncommitted changes, so the swap refused to run');
+    return t.skip('CLAUDE.md or an operational doc has uncommitted changes, so the swap refused to run');
   }
 
   assert.strictEqual(r.status, 2, 'a run that produced no verdict must not exit 1 — the selftest reads that as a case failing');
   assert.deepStrictEqual(fs.readFileSync('CLAUDE.md'), before, 'CLAUDE.md must come back byte-identical');
-  assert.ok(!fs.existsSync('CLAUDE.md.protocol-backup'), 'no backup may be left behind');
+  assert.ok(!fs.existsSync(backupPath), 'no CLAUDE.md backup may be left behind');
+  docPaths.forEach((p, i) => {
+    if (docsBefore[i] == null) return; // the doc did not exist before the run; nothing to compare
+    assert.deepStrictEqual(fs.readFileSync(p), docsBefore[i], `${p} must come back byte-identical`);
+  });
+  for (const p of docBackups) assert.ok(!fs.existsSync(p), `no backup may be left behind for ${p}`);
 });
 
 test('a --protocol run gets a different fingerprint, so it can never license a skip', () => {

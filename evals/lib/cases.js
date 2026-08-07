@@ -1,5 +1,5 @@
 // =============================================================================
-// cases.js — load + validate eval cases from kp/agent/evals/*.md.
+// cases.js — load + validate eval cases from evals/cases/*.md.
 //
 //   A case is an operational doc (type: eval), so okf-lib's registry already
 //   skips it. Here we parse the SAME files for the runner. Frontmatter is the
@@ -14,7 +14,9 @@ const fs = require('fs');
 const path = require('path');
 const matter = require('gray-matter');
 
-const EVALS_DIR = process.env.EVALS_DIR || path.join('kp', 'agent', 'evals');
+// EVAL-18: case files live OUTSIDE the kp/ tree the agent under test explores,
+// so a run can't read its own answer key (gold_query + reasoning) off disk.
+const EVALS_DIR = process.env.EVALS_DIR || path.join('evals', 'cases');
 
 // How a case is graded. `analysis` is not in the original spec list but is in
 // use (financial-situation-projection) — it means "no single gold artifact;
@@ -25,6 +27,15 @@ const EXPECT_KINDS = new Set(['numeric', 'refusal', 'contains', 'query_shape', '
 // Weakest result-set match a query_shape case will accept (EVAL-9).
 const MATCH_TIERS = new Set(['subset', 'values', 'exact']);
 const DEFAULT_MATCH = 'subset';
+
+// How far must_not_contain reaches (see grade.js's committedSegments):
+//   'all'   (default) — every executed query. Right when the pattern must
+//           never be true regardless of why a query ran.
+//   'final' — only the last executed query. Opt in when a legitimate
+//           verification query would otherwise trip the check on the way to
+//           a correct final answer.
+const MNC_SCOPES = new Set(['all', 'final']);
+const DEFAULT_MNC_SCOPE = 'all';
 
 // How the case is EXECUTED (EVAL-12a):
 //   1 — one call, no tools, structured JSON. The case tests a DECISION:
@@ -90,6 +101,8 @@ function loadCase(file) {
     errors.push(`max_malloy_calls must be a non-negative integer (found '${d.max_malloy_calls}')`);
   if (d.tier != null && !RUN_TIERS.has(Number(d.tier)))
     errors.push(`unknown tier '${d.tier}' (expected: ${[...RUN_TIERS].join(' | ')})`);
+  if (d.must_not_contain_scope != null && !MNC_SCOPES.has(String(d.must_not_contain_scope)))
+    errors.push(`unknown must_not_contain_scope '${d.must_not_contain_scope}' (expected: ${[...MNC_SCOPES].join(' | ')})`);
 
   // EVAL-10: an `analysis` case has no gold artifact — the cross-checks ARE the
   // grade. With none of them set it passes unconditionally, forever, while
@@ -129,6 +142,7 @@ function loadCase(file) {
     expect_contains: toList(d.expect_contains),
     must_use: toList(d.must_use),
     must_not_contain: toList(d.must_not_contain),
+    must_not_contain_scope: d.must_not_contain_scope ? String(d.must_not_contain_scope) : DEFAULT_MNC_SCOPE,
     // opt-in: assert the AGT-1 provenance footer is present. Presence is
     // ALWAYS recorded as telemetry regardless (see grade.js).
     expect_receipt: d.expect_receipt === true,
@@ -167,5 +181,5 @@ function loadCases(dir = EVALS_DIR, filter = null) {
 module.exports = {
   loadCases, loadCase, splitRuns, toList,
   EVALS_DIR, EXPECT_KINDS, DEFAULT_TOLERANCE, MATCH_TIERS, DEFAULT_MATCH,
-  RUN_TIERS, DEFAULT_TIER,
+  RUN_TIERS, DEFAULT_TIER, MNC_SCOPES, DEFAULT_MNC_SCOPE,
 };
