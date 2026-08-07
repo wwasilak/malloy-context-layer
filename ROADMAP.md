@@ -70,10 +70,11 @@ becoming the bottleneck). SIMP-2, 3, 4 and 5 have all shipped.
    — OKF-6 (`6af67ef`, governance predicate now unit-tested), OKF-7 (`4a397c9`,
    real YAML in `okf_to_excel.py`), OKF-8 (`a444458`, one shared slugify per
    language + cross-language golden test) all shipped and green (115 tests).
-   OKF-9 was already closed (the warn guard exists). OKF-10 surfaced and is
-   logged (Excel round-trip not byte-identical to `kp/` — CRLF + `last_validated`
-   reorder, pre-existing, low priority). See Phase 2d's "Review follow-ups".
-   Branch not yet merged.
+   OKF-9 was already closed (the warn guard exists). OKF-10 (`56be7c3`) also
+   done: fixed the recurring CRLF/LF churn at its root — Python writers now emit
+   LF (`newline='\n'`), the Excel round-trip is byte-identical to `kp/`, and
+   `kp_viz.html` no longer churns to CRLF on build. See Phase 2d's "Review
+   follow-ups". Branch not yet merged.
 
 **Then:** pick a server — INT-1/INT-2 first (both runtime-independent), then
 INT-3a or INT-3b with INT-6.
@@ -1582,7 +1583,7 @@ findings are resolved (OKF-9 turned out to be already-guarded); a fifth
 | OKF-7 | Python round-trip scrapes a hand-serialized string with regex | **medium** | **DONE** (`4a397c9`) — `okf_to_excel.py` now parses frontmatter with `yaml.safe_load`; `flow_field`/`frontmatter`/`unq`/`unlist`/`import re` all gone. |
 | OKF-8 | Duplicated helpers across the polyglot boundary | low | **DONE** (`a444458`) — one `slugify` per language (`okf-slug.js`, `okf_slug.py`), pinned by a cross-language golden test. |
 | OKF-9 | Lossy status mapping is unguarded | low | **ALREADY CLOSED** — the warn guard the finding asked for already exists at `excel_to_okf.py:61` (`if st not in STATUS_MAP: warnings.append(...)`), added `b838adc` (2026-07-24), before this review. The review missed the existing line. No code change; no test (the whole `excel_to_okf.py` validation path is untested — a future item if the Excel surface is revived, see OPT-6). |
-| OKF-10 | Excel round-trip is NOT byte-identical to `kp/` | low | **NEW, logged** — see below. |
+| OKF-10 | Excel round-trip is NOT byte-identical to `kp/` (CRLF + field reorder) | low | **DONE** (`56be7c3`) — Python writers now emit LF; round-trip byte-identical; `kp_viz.html` no longer churns to CRLF. See below. |
 
 #### OKF-6 · Unit-test `trustTierOf` / `governed` · DONE (`6af67ef`)
 
@@ -1626,20 +1627,33 @@ duplicated across the language boundary — that is inherent to a two-language r
 and the build-clean invariant catches marker drift; only `slugify` (the subtle,
 actor-minting one) warranted the shared module + test.
 
-#### OKF-10 · The Excel round-trip is not byte-identical to `kp/` · low · OPEN
+#### OKF-10 · The Excel round-trip is not byte-identical to `kp/` · DONE (`56be7c3`)
 
-Surfaced while proving OKF-7/OKF-8. ARCHITECTURE.md claims the
-`okf_to_excel → excel_to_okf` round-trip is "verified byte-identical", but in
-this environment it is not — for two reasons, **both pre-existing on `main` and
-unrelated to OKF-7/8** (the new scripts produce a round-trip byte-identical to
-`main`'s): (1) `excel_to_okf.py` writes LF while `kp/` is CRLF, and (2) its emit
-places `last_validated` before `generated`/`verified`, whereas the hand-authored
-files place it after. Neither corrupts meaning — the build is clean and
-`git status kp/` is empty because the real tree is untouched — but the
-"byte-identical" claim is currently false. Fix is a small emit-side change
-(preserve CRLF; emit `last_validated` in the authored position) plus either a
-round-trip test or a corrected ARCHITECTURE.md claim. Low priority: the Excel
-surface is dormant (OPT-6) and nothing depends on the round-trip today.
+Surfaced while proving OKF-7/OKF-8, and the concrete face of the recurring
+CRLF/LF churn. **Diagnosis (corrected from the first pass):** the repo policy is
+already right — `.gitattributes` `* text=auto eol=lf` forces LF everywhere and
+overrides a contributor's `core.autocrlf`; committed blobs are all LF (0
+`i/crlf` files repo-wide); `kp/` is genuinely LF (not CRLF — the first write-up
+misread a `grep -c $'\r'`). The real root cause is that **Python's text-mode
+`open('w')` defaults to `os.linesep` (CRLF on Windows)**, so every Python writer
+emitted CRLF and fought the policy. Git hid it (normalized-clean), but every
+byte-level tool (`diff`, round-trip byte-identity) saw it.
+
+Two-part cause, two fixes:
+1. `excel_to_okf.py` wrote CRLF **and** emitted `last_validated` before
+   `generated`/`verified` (authored files put it after). Fix: `newline='\n'` on
+   both writes + move `last_validated` after provenance. The full
+   `okf_to_excel → excel_to_okf` round-trip against a scratch copy of `kp/` is
+   now **byte-identical (exact diff, no CR stripping)** — so ARCHITECTURE.md's
+   "verified byte-identical" claim is finally true, no doc edit needed.
+2. `make_viz.py`'s vendored `generate_visualization` writes CRLF, leaving
+   `kp_viz.html` as `w/crlf` after every build. Fix: normalize the output HTML
+   to LF after it returns. Verified: two consecutive builds are byte-stable and
+   leave the tracked html clean.
+
+**General policy going forward:** any Python file-writer that targets the tree
+must pass `newline='\n'` (Node writers are already fine — they join on `'\n'`
+and don't translate). Only these two Python writers exist today; both fixed.
 
 ---
 
