@@ -5,8 +5,20 @@ node_modules/
 knowledge-catalog/
 __pycache__/
 
+# Machine-specific local Malloy MCP config (hardcoded absolute paths) — each
+# contributor keeps their own; not portable, so not tracked.
+malloy-config.json
+
+# Generated, regenerable artifact (produced by `python okf_to_excel.py`); a
+# committed copy only drifts from kp/. Regenerate on demand instead.
+knowledge_plane_workbook.xlsx
+
 # evals/results/*.jsonl IS committed on purpose — it is the regression history
 # that `eval:report` diffs. Only a sweep's console log is ignored (*.log above).
 # evals/results/correlation/ likewise: it is the evidence that the cheap lane
 # still agrees with the expensive one, which is what licenses running cases
 # cheap at all (EVAL-12).
+# EXCEPTION: evals/results/selftest/ is diagnostic (the harness checking itself),
+# not product regression history — it accumulates on every self-test run and is
+# regenerable, so it is ephemeral and not tracked.
+evals/results/selftest/
