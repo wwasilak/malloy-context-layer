@@ -66,10 +66,14 @@ becoming the bottleneck). SIMP-2, 3, 4 and 5 have all shipped.
    closed and re-opens implicitly via the standing pipeline rule below. Backlog
    (deferred, not lost): a Home Appliances discount/margin case + control variant
    were sketched but not authored — pick them up if that question recurs.
-4. **Post-merge review follow-ups logged (2026-08-07)** — OKF-6 (unit-test the
-   governance predicate) and OKF-7 (replace the Python regex frontmatter parse
-   with real YAML) are the two high-value ones; see Phase 2d's "Review
-   follow-ups". Not started.
+4. **Post-merge review follow-ups DONE (2026-08-07, branch `okf-review-followups`)**
+   — OKF-6 (`6af67ef`, governance predicate now unit-tested), OKF-7 (`4a397c9`,
+   real YAML in `okf_to_excel.py`), OKF-8 (`a444458`, one shared slugify per
+   language + cross-language golden test) all shipped and green (115 tests).
+   OKF-9 was already closed (the warn guard exists). OKF-10 surfaced and is
+   logged (Excel round-trip not byte-identical to `kp/` — CRLF + `last_validated`
+   reorder, pre-existing, low priority). See Phase 2d's "Review follow-ups".
+   Branch not yet merged.
 
 **Then:** pick a server — INT-1/INT-2 first (both runtime-independent), then
 INT-3a or INT-3b with INT-6.
@@ -1564,42 +1568,78 @@ few historical narrative comments (SIMP-4/SIMP-5 write-ups) — left as-is
 deliberately, since those describe what was true when they were written, not
 the current vocabulary.
 
-### Review follow-ups (post-merge code review, 2026-08-07) · OPEN
+### Review follow-ups (post-merge code review, 2026-08-07) · OKF-6/7/8 DONE, OKF-9 already-closed, OKF-10 logged (branch `okf-review-followups`)
 
 Findings from reviewing the shipped OKF v0.2 migration (`f5064e1`) as code, not
 as a spec adoption. The migration is sound and `migrate-okf-02.js` is exemplary
-(idempotent, `--dry-run`, CRLF-aware, formatting-preserving). Two real gaps and
-two smells remain; the first is the one that matters.
+(idempotent, `--dry-run`, CRLF-aware, formatting-preserving). All four original
+findings are resolved (OKF-9 turned out to be already-guarded); a fifth
+(OKF-10) surfaced while proving OKF-7/8 and is logged below.
 
-| Code | Item | Severity | Detail |
+| Code | Item | Severity | Status |
 |---|---|---|---|
-| OKF-6 | Governance predicate is untested | **high** | `trustTierOf` / `governed` / `verifiedList` in `okf-lib.js` — the entire point of the migration — have NO direct unit test (`test/unit.test.js` `governed` hits are all unrelated protocol tests). They are pure, branchy functions already exported for testing; validated today only indirectly, through a live eval probe (slower, less precise, costs money). See OKF-6. |
-| OKF-7 | Python round-trip scrapes a hand-serialized string with regex | **medium** | `okf_to_excel.py`'s `flow_field` re-parses the `{ by:…, at:… }` flow mapping with `re.search(key + r':\s*([^,}]+)')` because the repo's hand-rolled `frontmatter()` (line 29) only stores raw strings. So a regex extracts a field out of a string that `excel_to_okf.py` built by concatenation — coupled to the exact spelling, and broken by any value containing `,` or `}`. A real `pyyaml` load removes the class. See OKF-7. |
-| OKF-8 | Duplicated helpers across the polyglot boundary | low | `slugify` is reimplemented in `migrate-okf-02.js` and `excel_to_okf.py`; `KINDS` and the `GEN_BEGIN/END` markers are redefined in JS and Python. Drift-prone. Acceptable in a two-language repo, but nothing tests the two `slugify`s agree, and they must (they mint the same `human:<steward>` actor on each side of the round-trip). |
-| OKF-9 | Lossy status mapping is unguarded | low | `In review` collapses to `draft` via `STATUS_MAP.get(...)` fallback (acknowledged in a comment), but nothing asserts an *unexpected* status doesn't also silently become `draft`. A one-line "unknown status → warn, not silently draft" guard closes it. |
+| OKF-6 | Governance predicate is untested | **high** | **DONE** (`6af67ef`) — extracted the inline `governed` boolean to `governedOf(status, verified)` and pinned `verifiedList`/`trustTierOf`/`governedOf` with a table test. |
+| OKF-7 | Python round-trip scrapes a hand-serialized string with regex | **medium** | **DONE** (`4a397c9`) — `okf_to_excel.py` now parses frontmatter with `yaml.safe_load`; `flow_field`/`frontmatter`/`unq`/`unlist`/`import re` all gone. |
+| OKF-8 | Duplicated helpers across the polyglot boundary | low | **DONE** (`a444458`) — one `slugify` per language (`okf-slug.js`, `okf_slug.py`), pinned by a cross-language golden test. |
+| OKF-9 | Lossy status mapping is unguarded | low | **ALREADY CLOSED** — the warn guard the finding asked for already exists at `excel_to_okf.py:61` (`if st not in STATUS_MAP: warnings.append(...)`), added `b838adc` (2026-07-24), before this review. The review missed the existing line. No code change; no test (the whole `excel_to_okf.py` validation path is untested — a future item if the Excel surface is revived, see OPT-6). |
+| OKF-10 | Excel round-trip is NOT byte-identical to `kp/` | low | **NEW, logged** — see below. |
 
-#### OKF-6 · Unit-test `trustTierOf` / `governed` · ~0.5 day · OPEN
+#### OKF-6 · Unit-test `trustTierOf` / `governed` · DONE (`6af67ef`)
 
-The cheapest high-value follow-up. A small table test pinning:
-`verified` absent → `unverified`; only non-`human:` actors → `machine-confirmed`;
-any `human:` actor → `human-reviewed`; and `governed` true **only** when
-`status: stable` AND tier `human-reviewed` (so `stable` + machine-only is NOT
-governed, and `human-reviewed` + `draft` is NOT governed). Also pin
-`verifiedList` normalizing a bare `{ by, at }` mapping to a one-element list
-(SPEC.md §5.2 requires consumers tolerate this). This is the EVAL-8 lesson
-again: logic that gates the build and the agent must be pinned by a test, not
-observed once live.
+Extracted the inline governance boolean at `okf-lib.js:97` into
+`governedOf(status, verified)` (behaviour-preserving: build stays clean, routing
+table byte-identical) and exported it. Table test pins: `verified` absent →
+`unverified`; only non-`human:` actors → `machine-confirmed`; any `human:` actor
+→ `human-reviewed` (incl. the `human:` **prefix** not being fooled by a
+substring like `not-a-human:x`); `governed` true **only** when `status: stable`
+AND tier `human-reviewed` (so `stable` + machine-only is NOT governed, and
+`human-reviewed` + `draft` is NOT); and `verifiedList` normalizing a bare
+`{ by, at }` mapping to a one-element list (SPEC.md §5.2). The EVAL-8 lesson:
+logic that gates the build and the agent is pinned by a test, not observed live.
 
-#### OKF-7 · Replace the Python regex frontmatter parse with real YAML · ~0.5 day · OPEN
+#### OKF-7 · Replace the Python regex frontmatter parse with real YAML · DONE (`4a397c9`)
 
-`okf_to_excel.py`'s `frontmatter()` (a hand-rolled line matcher) plus
-`flow_field` (a regex over the serialized flow mapping) is fragile precisely
-where the round-trip's audit trail lives (`generated`/`verified` → Excel
-`Approved by`/`Approved on`). Swap to `yaml.safe_load` on the frontmatter block
-so `verified`/`generated` come back as real dicts and the `flow_field` regex
-goes away entirely. Gate: `okf_to_excel.py` → `excel_to_okf.py` round-trip must
-leave `kp/` byte-identical (the existing build-clean invariant), so this is
-verifiable without live runs.
+`okf_to_excel.py` now parses the frontmatter block with `yaml.safe_load`, so
+`verified`/`generated` come back as real dicts and `relationships` as a list of
+dicts; `flow_field`, `unq`, `unlist`, the `__nested` line handling, and the last
+`bundle.yaml` namespace regex all go away (and with them `import re`). Gate met
+**without touching `kp/`**: the workbook is a pure function of the parsed values,
+so old-vs-new `okf_to_excel.py` over the real bundle producing a byte-identical
+workbook (0 cell diffs across all 4 sheets, 55 concepts / 6 relationships) proves
+the round-trip is unaffected. The change is also a real fix, not just a rewrite:
+a SPEC.md §5.2 list-form `verified` (machine build + human sign-off) that the old
+line-matcher silently dropped to an empty `Approved on` now reads the first
+entry's date. Full `okf_to_excel → excel_to_okf` round-trip against a scratch
+copy confirmed byte-identical to `main`'s scripts.
+
+#### OKF-8 · One shared slugify per language, pinned by a golden · DONE (`a444458`)
+
+`slugify` mints the `human:<steward>` actor in `generated`/`verified`, and it
+lived twice in JS and Python with nothing checking the copies agree. Extracted
+each language's copy into one importable, side-effect-free module (`okf-slug.js`
+used by `migrate-okf-02.js`; `okf_slug.py` used by `excel_to_okf.py`) and pinned
+the contract with one golden table in `unit.test.js`: a JS test asserts the JS
+slug matches the golden, and a second shells out to the REAL `okf_slug.py` and
+asserts byte-identical output (skips cleanly when no python is on PATH, mirroring
+`build.js`'s viz probe). `KINDS` and the `GEN_BEGIN/END` markers remain
+duplicated across the language boundary — that is inherent to a two-language repo
+and the build-clean invariant catches marker drift; only `slugify` (the subtle,
+actor-minting one) warranted the shared module + test.
+
+#### OKF-10 · The Excel round-trip is not byte-identical to `kp/` · low · OPEN
+
+Surfaced while proving OKF-7/OKF-8. ARCHITECTURE.md claims the
+`okf_to_excel → excel_to_okf` round-trip is "verified byte-identical", but in
+this environment it is not — for two reasons, **both pre-existing on `main` and
+unrelated to OKF-7/8** (the new scripts produce a round-trip byte-identical to
+`main`'s): (1) `excel_to_okf.py` writes LF while `kp/` is CRLF, and (2) its emit
+places `last_validated` before `generated`/`verified`, whereas the hand-authored
+files place it after. Neither corrupts meaning — the build is clean and
+`git status kp/` is empty because the real tree is untouched — but the
+"byte-identical" claim is currently false. Fix is a small emit-side change
+(preserve CRLF; emit `last_validated` in the authored position) plus either a
+round-trip test or a corrected ARCHITECTURE.md claim. Low priority: the Excel
+surface is dormant (OPT-6) and nothing depends on the round-trip today.
 
 ---
 
