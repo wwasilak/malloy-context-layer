@@ -31,6 +31,13 @@ function trustTierOf(verified) {
   return list.some((v) => v && typeof v.by === 'string' && v.by.startsWith('human:'))
     ? 'human-reviewed' : 'machine-confirmed';
 }
+// Governance gate (CLAUDE.md "Routing"): lifecycle-ready AND a human has signed
+// off. Two independent axes (readiness vs trust) collapsed into the one boolean
+// the agent and the build actually need. Extracted so it can be pinned by a
+// unit test (OKF-6) rather than observed only through a live eval probe.
+function governedOf(status, verified) {
+  return (status || 'draft') === 'stable' && trustTierOf(verified) === 'human-reviewed';
+}
 
 // ---- 1. load ----------------------------------------------------------------
 function loadBundle(dir) {
@@ -91,10 +98,7 @@ function loadBundle(dir) {
       generated: d.generated || null,
       verified: verifiedList(d.verified),
       trust_tier: trustTierOf(d.verified),
-      // governance gate (CLAUDE.md "Routing"): lifecycle-ready AND a human has
-      // signed off. Two independent axes (readiness vs trust) collapsed into
-      // the one boolean the agent and the build actually need.
-      governed: (d.status || 'draft') === 'stable' && trustTierOf(d.verified) === 'human-reviewed',
+      governed: governedOf(d.status, d.verified),
       _path: rel,
       _domain: rel.split(path.sep)[0],
     };
@@ -222,4 +226,4 @@ function writeBack(dir, { canon }, implementations, sourceConcepts = {}, extras 
   return touched;
 }
 
-module.exports = { loadBundle, writeBack, GEN_BEGIN, GEN_END, OKF_VERSION, verifiedList, trustTierOf };
+module.exports = { loadBundle, writeBack, GEN_BEGIN, GEN_END, OKF_VERSION, verifiedList, trustTierOf, governedOf };

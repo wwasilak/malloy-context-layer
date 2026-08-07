@@ -38,6 +38,7 @@ const {
   conceptDeps,
 } = require('../evals/lib/select');
 const { runPool, serialize } = require('../evals/lib/pool');
+const { verifiedList, trustTierOf, governedOf } = require('../okf-lib');
 
 // ---- porcelainPaths (EVAL-8 regression) -------------------------------------
 // `git status --porcelain` emits `XY PATH`. X or Y is very often a space, so
@@ -1262,4 +1263,60 @@ test('serialize keeps DuckDB calls from overlapping, and a failure does not wedg
   assert.strictEqual(peak, 1);
   assert.deepStrictEqual(results.map((r) => r.status), ['fulfilled', 'rejected', 'fulfilled']);
   assert.strictEqual(await q('d'), 'd');
+});
+
+// ---- OKF v0.2 governance predicate (OKF-6) ----------------------------------
+// verifiedList / trustTierOf / governedOf gate the build (build.js filters on
+// `governed`) and the agent (CLAUDE.md routing returns figures only for a
+// governed concept). Yet before this block they were validated only indirectly,
+// through a live eval probe — slower, less precise, and it costs money. They are
+// pure and branchy, so they get pinned here directly. This is the EVAL-8 lesson:
+// logic that gates the build must be pinned by a test, not observed once live.
+
+test('verifiedList normalizes a bare {by,at} mapping to a one-element list (SPEC.md §5.2)', () => {
+  const one = { by: 'human:sales-lead', at: '2026-01-01' };
+  assert.deepStrictEqual(verifiedList(one), [one]);          // consumers must tolerate the scalar
+  assert.deepStrictEqual(verifiedList([one, one]), [one, one]); // a list passes through
+  assert.deepStrictEqual(verifiedList(null), []);            // absent -> empty
+  assert.deepStrictEqual(verifiedList(undefined), []);
+});
+
+test('trustTierOf: no verified -> unverified; machine-only -> machine-confirmed; any human -> human-reviewed', () => {
+  const machine = { by: 'machine:build', at: '2026-01-01' };
+  const human = { by: 'human:sales-lead', at: '2026-01-01' };
+
+  assert.strictEqual(trustTierOf(undefined), 'unverified');
+  assert.strictEqual(trustTierOf([]), 'unverified');
+
+  assert.strictEqual(trustTierOf(machine), 'machine-confirmed');       // bare mapping
+  assert.strictEqual(trustTierOf([machine, machine]), 'machine-confirmed');
+
+  assert.strictEqual(trustTierOf(human), 'human-reviewed');            // bare mapping
+  assert.strictEqual(trustTierOf([machine, human]), 'human-reviewed'); // one human is enough
+});
+
+test('trustTierOf is not fooled by a substring: human: must be the prefix', () => {
+  // "not-a-human:x" contains "human:" but is not a human actor.
+  assert.strictEqual(trustTierOf({ by: 'not-a-human:x', at: '2026-01-01' }), 'machine-confirmed');
+  // a missing or non-string `by` is not an actor at all
+  assert.strictEqual(trustTierOf({ at: '2026-01-01' }), 'machine-confirmed');
+  assert.strictEqual(trustTierOf(null), 'unverified');
+});
+
+test('governedOf is true ONLY when status is stable AND a human reviewed it', () => {
+  const human = { by: 'human:sales-lead', at: '2026-01-01' };
+  const machine = { by: 'machine:build', at: '2026-01-01' };
+
+  // the one true corner: both axes satisfied
+  assert.strictEqual(governedOf('stable', human), true);
+
+  // stable but machine-only trust -> NOT governed (readiness without a human)
+  assert.strictEqual(governedOf('stable', machine), false);
+  // stable but unverified -> NOT governed
+  assert.strictEqual(governedOf('stable', undefined), false);
+  // human-reviewed but not lifecycle-ready -> NOT governed
+  assert.strictEqual(governedOf('draft', human), false);
+  assert.strictEqual(governedOf('review', human), false);
+  // missing status defaults to draft, so a human sign-off alone stays ungoverned
+  assert.strictEqual(governedOf(undefined, human), false);
 });
