@@ -59,8 +59,13 @@ becoming the bottleneck). SIMP-2, 3, 4 and 5 have all shipped.
    and dropping the redundant `must_not_contain`. Discriminates across 4 live
    runs (real pass ×2 / stripped fail ×2). EVAL-19 shipped and unit-tested. See
    EVAL-18's bike-name entry and EVAL-19.
-3. **Continue EVAL-5 harvest** toward ~30 (Home Appliances discount/margin
-   question + control variant identified, not yet authored).
+3. **EVAL-5 CLOSED (2026-08-07)** — the initial-backlog harvest is done (9 cases,
+   8 discriminating + 1 exempt) and the three source logs are drained. The ~30
+   was a volume aspiration tied to question throughput, never a completion bar;
+   with no new questions arriving there is no material to harvest, so the task is
+   closed and re-opens implicitly via the standing pipeline rule below. Backlog
+   (deferred, not lost): a Home Appliances discount/margin case + control variant
+   were sketched but not authored — pick them up if that question recurs.
 4. **Post-merge review follow-ups logged (2026-08-07)** — OKF-6 (unit-test the
    governance predicate) and OKF-7 (replace the Python regex frontmatter parse
    with real YAML) are the two high-value ones; see Phase 2d's "Review
@@ -69,8 +74,9 @@ becoming the bottleneck). SIMP-2, 3, 4 and 5 have all shipped.
 **Then:** pick a server — INT-1/INT-2 first (both runtime-independent), then
 INT-3a or INT-3b with INT-6.
 
-**Continuously:** EVAL-5 harvesting toward ~30 cases; every correction filed gets
-an eval case in the same PR.
+**Continuously (the standing pipeline — outlives EVAL-5's closure):** every
+correction filed gets an eval case in the same PR. This is what re-opens
+harvesting when new questions arrive; the ~30 target is retired as a goal.
 
 **Phase 2d is DONE (2026-08-06, branch `okf-2.0`)** — format-only OKF v0.2
 adoption. See its section for the full record; §10 Attested Computation is
@@ -200,9 +206,9 @@ provenance-stamped results file; `npm run eval:report` diffs the last two runs.
 | EVAL-3 | Results as telemetry | done | One JSONL row per (case × run) in `evals/results/`, plus a `run_meta` header line. Records verdict + reason, answer excerpt, executed Malloy, extracted vs expected, tokens, cost, latency, turns, receipt presence, semantic identity, model, runtime, data source. `evals/report.js` prints per-category pass rate, pass→fail flips and flaky cases. `last_validated` stamping on passing `must_use` concepts — the writer `ARCHITECTURE.md` documented but nothing implemented. |
 | EVAL-4 | Fixture data for CI | done (no new files) | The parquets under `ParquetFiles/` are already committed, so CI checks out byte-identical data and gold values are already stable. A second sampled copy would add a sync burden and a fixture-vs-live gold discrepancy for no gain, so `fixtures` means the committed set resolved via WORKDIR (as `build.js` does), and `--live` switches to `EVAL_LIVE_WORKDIR`. |
 | EVAL-6 | Semantic identity hash | done | `sha256(digest(kp/) + digest(models/) + digest(CLAUDE.md) + malloy/duckdb/dialect)` on every result row; `eval:report` uses it to say whether a flip means the data moved or the meaning moved. Digests the WORKING TREE (evals matter most on uncommitted edits); git tree shas recorded alongside with a dirty flag. `CLAUDE.md` is included because the routing protocol can move every number without touching a concept. |
-| EVAL-5 | Seed from real usage | **in progress** | 9 cases harvested 2026-08-06, committed on `eval-5-harvest` 2026-08-07 (`71f03e2`, `dbee9f0`, `dc95586`); all 9 resolved — 8 discriminating + 1 exempt (`refusal-returns-not-in-data`). Found EVAL-15/16/17/18 and EVAL-19 (five real selftest-harness bugs) along the way. Continue harvesting toward ~30. See EVAL-5's section for the harvest and EVAL-15 onward for the bugs. |
+| EVAL-5 | Seed from real usage | **closed (2026-08-07)** | 9 cases harvested 2026-08-06, committed on `eval-5-harvest` 2026-08-07 (`71f03e2`, `dbee9f0`, `dc95586`); all 9 resolved — 8 discriminating + 1 exempt (`refusal-returns-not-in-data`). Found EVAL-15/16/17/18 and EVAL-19 (five real selftest-harness bugs) along the way. Initial-backlog harvest done and source logs drained; ~30 target retired (it was a volume aspiration, not a bar). Further cases arrive via the standing correction→case pipeline, not a reopened task. See EVAL-5's section for the harvest and EVAL-15 onward for the bugs. |
 
-### EVAL-5 · Seed from real usage · IN PROGRESS, 9 cases harvested 2026-08-06, all 9 resolved 2026-08-07 (8 discriminating + 1 exempt); harvesting continues toward ~30
+### EVAL-5 · Seed from real usage · CLOSED 2026-08-07 — 9 cases harvested 2026-08-06, all 9 resolved (8 discriminating + 1 exempt); initial backlog drained, ~30 target retired, further cases via the standing correction→case pipeline
 
 **Count corrected below.** This section's first pass counted all 9 as headed
 for 16 of ~30 the moment they went green; three of them only went green
