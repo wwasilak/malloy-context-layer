@@ -48,4 +48,13 @@ with tempfile.TemporaryDirectory() as tmp:
     from pathlib import Path
     stats = gen.generate_visualization(Path(stage), Path(OUT), bundle_name='Knowledge Plane')
     print('viewer stats:', stats)
+
+# The vendored generator writes CRLF on Windows, which fights the repo's LF
+# policy (.gitattributes eol=lf) and leaves kp_viz.html as w/crlf after every
+# build. Normalize the output to LF so the tracked file matches policy (OKF-10).
+with open(OUT, 'rb') as f:
+    html = f.read()
+if b'\r\n' in html:
+    with open(OUT, 'wb') as f:
+        f.write(html.replace(b'\r\n', b'\n'))
 print(f'-> {OUT}  (open in any browser)')

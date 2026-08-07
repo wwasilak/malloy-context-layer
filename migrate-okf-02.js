@@ -21,13 +21,11 @@
 const fs = require('fs');
 const path = require('path');
 const matter = require('gray-matter');
+const { actorFor } = require('./okf-slug'); // OKF-8: one shared slug, agrees with okf_slug.py
 
 const KP_DIR = process.env.KP_DIR || 'kp';
 const KINDS = new Set(['entity', 'defined_class', 'measure', 'attribute']);
 const DRY = process.argv.includes('--dry-run');
-
-const slugify = (s) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-const actorFor = (steward) => `human:${slugify(steward || 'global')}`;
 const isoAt = (ts) => {
   const s = ts instanceof Date ? ts.toISOString().slice(0, 10) : String(ts);
   return s.includes('T') ? s : `${s}T00:00:00Z`;
