@@ -20,9 +20,12 @@ other `type` are operational docs, not concepts:
 
 - `kp/agent/examples.md` — canonical query shapes the agent copies
 - `kp/agent/gap-log.md` — agent-appended terms with no concept (demand-ranked backlog)
+- `kp/agent/question-log.md` — novel analyses the agent logged (promotion candidates)
 - `kp/agent/corrections.md` — steward-confirmed wrong answers + standing hints
-- `kp/agent/gap-log.md`, `question-log.md`, `corrections.md`, `evals/*.md`
-  (see the operational docs list in CLAUDE.md)
+
+Eval regression cases are NOT under `kp/`: they live in `evals/cases/*.md`
+(harness fixtures, outside the tree the agent explores — EVAL-18). See the
+operational docs list in CLAUDE.md.
 
 ### Global vs local concepts
 

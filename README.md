@@ -90,7 +90,8 @@ npm run eval:report    # pass rate by category + what flipped since last run
   grading kind, anchored ground truth, telemetry, semantic identity.
 - **[ROADMAP.md](ROADMAP.md)** — what's done and what's next.
 - **`kp/agent/`** — operational docs the agent reads and appends to: `examples.md`,
-  `gap-log.md`, `question-log.md`, `corrections.md`, `evals/`.
+  `gap-log.md`, `question-log.md`, `corrections.md`. (Eval cases live in
+  `evals/cases/`, not here — EVAL-18.)
 
 ## Notes
 
