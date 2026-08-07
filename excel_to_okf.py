@@ -12,6 +12,7 @@
 # =============================================================================
 import sys, os, re, datetime
 import openpyxl
+from okf_slug import slugify  # OKF-8: one shared slug, agrees with okf-slug.js
 
 WB_FILE = sys.argv[1] if len(sys.argv) > 1 else 'knowledge_plane_workbook.xlsx'
 OUT     = sys.argv[2] if len(sys.argv) > 2 else 'kp'
@@ -92,9 +93,6 @@ for w in warnings: print('  WARN ' + w)
 def domain_of(c): return STEWARD_TO_DOMAIN.get(c.get('Steward'), 'global')
 def kebab(uri):   return re.sub(r'(?<!^)(?=[A-Z])', '-', uri.split(':')[1]).lower()
 path_of = {u: f'{domain_of(c)}/{kebab(u)}.md' for u, c in concepts.items()}
-
-def slugify(s):
-    return re.sub(r'(^-|-$)', '', re.sub(r'[^a-z0-9]+', '-', str(s).lower().strip()))
 
 def yq(s):
     if isinstance(s, list): return '[' + ', '.join(yq(x) for x in s) + ']'

@@ -3,6 +3,7 @@ node_modules/
 .DS_Store
 .vscode/
 knowledge-catalog/
+__pycache__/
 
 # evals/results/*.jsonl IS committed on purpose — it is the regression history
 # that `eval:report` diffs. Only a sweep's console log is ignored (*.log above).

@@ -39,6 +39,7 @@ const {
 } = require('../evals/lib/select');
 const { runPool, serialize } = require('../evals/lib/pool');
 const { verifiedList, trustTierOf, governedOf } = require('../okf-lib');
+const { slugify, actorFor } = require('../okf-slug');
 
 // ---- porcelainPaths (EVAL-8 regression) -------------------------------------
 // `git status --porcelain` emits `XY PATH`. X or Y is very often a space, so
@@ -1319,4 +1320,48 @@ test('governedOf is true ONLY when status is stable AND a human reviewed it', ()
   assert.strictEqual(governedOf('review', human), false);
   // missing status defaults to draft, so a human sign-off alone stays ungoverned
   assert.strictEqual(governedOf(undefined, human), false);
+});
+
+// ---- actor-slug parity across the JS/Python boundary (OKF-8) -----------------
+// slugify mints the `human:<steward>` actor that stamps provenance. It lives in
+// two languages: okf-slug.js (used by migrate-okf-02.js) and okf_slug.py (used
+// by excel_to_okf.py). If they disagree on one steward, re-running either path
+// silently rewrites the actor. So one golden table pins the contract, and the
+// two implementations are run head-to-head against it.
+const SLUG_GOLDEN = [
+  ['Sales', 'sales'],
+  ['Retail Operations', 'retail-operations'],
+  ['Finance', 'finance'],
+  ['Merchandising', 'merchandising'],
+  ['global', 'global'],
+  ['  Spaced  Out  ', 'spaced-out'],   // collapse internal + trim edges
+  ['Ünïcode Café', 'n-code-caf'],      // non-[a-z0-9] runs become one hyphen
+  ['A&B / C, D', 'a-b-c-d'],           // punctuation (incl. ',' and '/') too
+  ['Already-slug', 'already-slug'],
+  ['UPPER_case 99', 'upper-case-99'],
+];
+
+test('okf-slug.js slugify/actorFor match the pinned actor-slug golden (OKF-8)', () => {
+  for (const [input, expected] of SLUG_GOLDEN) assert.strictEqual(slugify(input), expected);
+  assert.strictEqual(actorFor('Retail Operations'), 'human:retail-operations');
+  assert.strictEqual(actorFor(''), 'human:global');   // no steward -> global (global/ concepts)
+  assert.strictEqual(actorFor(null), 'human:global');
+});
+
+test('okf_slug.py mints byte-identical slugs to okf-slug.js (cross-language, OKF-8)', (t) => {
+  const { execSync, execFileSync } = require('node:child_process');
+  // `python3` is a Store stub on Windows; probe for one that can import the module.
+  const py = ['python3', 'python', 'py -3'].find((p) => {
+    try { execSync(`${p} -c "import okf_slug"`, { stdio: 'pipe' }); return true; } catch { return false; }
+  });
+  if (!py) { t.skip('no python on PATH able to import okf_slug'); return; }
+
+  const inputs = SLUG_GOLDEN.map(([i]) => i);
+  const [cmd, ...pre] = py.split(' ');
+  const script = 'import sys,json; from okf_slug import slugify; '
+    + 'print(json.dumps([slugify(x) for x in json.loads(sys.argv[1])]))';
+  const pyOut = JSON.parse(execFileSync(cmd, [...pre, '-c', script, JSON.stringify(inputs)], { encoding: 'utf8' }));
+
+  assert.deepStrictEqual(pyOut, inputs.map(slugify), 'Python and JS slugify disagree');
+  assert.deepStrictEqual(pyOut, SLUG_GOLDEN.map(([, e]) => e), 'Python slugify drifted from the golden');
 });
