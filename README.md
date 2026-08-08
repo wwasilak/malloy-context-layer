@@ -1,18 +1,18 @@
 # Context Layer (Knowledge Plane) + Malloy Semantic Layer (Data Plane)
 
-This is an experiment to create working implementation of the idea that comes from Juha Korpela's writing on semantic architecture:
+This is a second experiment (first one is here: https://github.com/wwasilak/malloy_knowledge_plane) to create working implementation of the idea that comes from Juha Korpela's writing on semantic architecture:
 
 - https://commonsensedata.substack.com/p/the-quest-for-semantic-architecture
 - https://commonsensedata.substack.com/p/semantic-linking-the-aboutness-of
 - https://commonsensedata.substack.com/p/semantic-linking-managing-mappings
 - https://commonsensedata.substack.com/p/building-semantics-with-conceptual
 
-Context layer (formerly Knowledge Plane - kp) contains the meaning part – business concepts, definitions, relationships, governance. For this part
+Knowledge Plane (kp, also Context Layer) contains the meaning part – business concepts, definitions, relationships, governance. For this part
 Google's Open Knowledge Format is used. As kp can contain hundreds of files, Excel template was also created - it can be generated from kp files and used by the Business Users to fill in the concepts and definitions. Python script extracts the data from Excel and converts it to okf bundle.
 
 Semantic layer is implemented via the Malloy language. Malloy models have defined sources, joins, measures, dimensions and views. It allows the agent to perform calculations in a repeatable, accurate way.
 
-Concepts in the context layer are linked to objects in the semantic layer. The relationship between those two layer is one-to-many, so concepts are never duplicated. Links, when a question in natural language is asked, allow the agent to quickly route to apropriate Malloy model. 
+Concepts in the knowledge plane are linked to objects in the semantic layer. The relationship between those two layer is one-to-many, so concepts are never duplicated. Links, when a question in natural language is asked, allow the agent to quickly route to apropriate Malloy model. 
 
 
 
