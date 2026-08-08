@@ -1,6 +1,6 @@
 # Context Layer (Knowledge Plane) + Malloy Semantic Layer (Data Plane)
 
-This is an experiment to create working implementation of the idea that comes from uha Korpela's writing on semantic architecture:
+This is an experiment to create working implementation of the idea that comes from Juha Korpela's writing on semantic architecture:
 
 - https://commonsensedata.substack.com/p/the-quest-for-semantic-architecture
 - https://commonsensedata.substack.com/p/semantic-linking-the-aboutness-of
@@ -8,7 +8,7 @@ This is an experiment to create working implementation of the idea that comes fr
 - https://commonsensedata.substack.com/p/building-semantics-with-conceptual
 
 Context layer (formerly Knowledge Plane - kp) contains the meaning part – business concepts, definitions, relationships, governance. For this part
-Google's Open Knowledge Format is used. As kp can contain hundreds of files, Excel template was also created - it would be used by the Business Users to fill in the concepts and definitions. Python script extracts the data from Excel and converts it to okf bundle.
+Google's Open Knowledge Format is used. As kp can contain hundreds of files, Excel template was also created - it can be generated from kp files and used by the Business Users to fill in the concepts and definitions. Python script extracts the data from Excel and converts it to okf bundle.
 
 Semantic layer is implemented via the Malloy language. Malloy models have defined sources, joins, measures, dimensions and views. It allows the agent to perform calculations in a repeatable, accurate way.
 
