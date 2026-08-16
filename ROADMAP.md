@@ -1692,11 +1692,39 @@ and don't translate). Only these two Python writers exist today; both fixed.
 
 | Code | Item | Trigger |
 |---|---|---|
+| HIER-1 | New structure in knowledge plane to handle hierarchies + aggregation logic for some measures.
 | OPT-1 | Adversarial review step — a reviewer sub-agent challenges final answers (Anthropic: +6% accuracy, +32% tokens, +72% latency) | evals plateau below target |
 | OPT-2 | Standalone visualizer — self-contained `make_viz`, no knowledge-catalog clone; can style declared vs derived edges, statuses | graph becomes a regular business-review artifact |
 | OPT-3 | Hierarchical bundle walk replaces read-whole routing table | routing table outgrows a single read (~hundreds of concepts) |
 | OPT-4 | Coverage-warning tuning — flag only derived fields, not raw columns | already identified; fold into next `build.js` touch |
 | OPT-6 | Excel authoring surface — REVIVED (v10) | Real steward pushback on editing markdown. `excel_to_okf.py` (archived, v5/v6) still works and preserves write-backs. **Hard rule if revived:** Excel becomes the SOLE write path for the frontmatter fields it owns — no mixed hand-editing, or the two paths silently fight. (0.5 day) |
+
+
+
+### HIER-1 — Dimensional hierarchies and measure roll-up (triggered)
+
+Trigger: a domain where either a measure is semi-additive (see below), or a hierarchy has contested level names, ordering not implied by the Malloy joins, or multiple valid ladders over the same leaves (e.g. a store rolling up to both a sales region and a legal entity). A clean single-ladder hierarchy with obvious names and one join-implied order is already handled by joins plus a rollup measure and needs no new object. Not warranted by Contoso, whose geography ladder is three levels Malloy traverses by join path.
+
+First, the correction that shrinks this item: additivity is mostly a Malloy property, not a KP field. Malloy defines a measure once at the base grain as an aggregate expression and recomputes it from leaf rows at every grouping level — it never rolls up pre-aggregated values. A plain additive measure (NetPrice.sum()) is correct at every level with no annotation, and a ratio (margin %, occupancy %) is also correct automatically, because at each level it recomputes numerator-over-denominator from that level's rows rather than averaging the level below. The classic sum(occupancy rates) disaster is a stored-aggregate problem Malloy structurally does not have. Do not add a broad rollup: additive/non_additive field — it annotates what the engine already infers.
+
+What the KP must carry is the three things Malloy cannot infer from the expression:
+
+Semi-additive measures — balances, inventory-on-hand, headcount: additive across space, but with a specific temporal rule. Malloy has no LASTNONBLANK equivalent; a naive balance.sum() silently double-counts across time at every level above the leaf, and the engine will not catch it because you told it to sum. Declare the rule explicitly so the agent routes deterministically instead of inferring it from an example: rollup: semi_additive carrying the time dimension and one of last_value | first_value | average | period_end | none. (none = no valid temporal aggregation exists; only ever show at a point in time — distinct from period_end, and the enum value where the next silent-wrong-answer would otherwise hide.) Pair the flag with a blessed two-stage pattern in examples.md (pick each entity's state per the rule within the period, then aggregate across space), because the correct form is a query structure, not a droppable measure.
+Weighting choices — where a rollup is a weighted average, which weight is correct (by area, by unit count, by lease value) is a business decision Malloy cannot derive. Record the decision in the plane; the implementation is then an ordinary Malloy measure that recomputes correctly at every level.
+do_not_aggregate — measures meaningful only at a specific grain (a rank, a period-end snapshot, a non-summable distinct count). Malloy will happily compute them at any grain; whether that is meaningful is governed judgment.
+
+Contoso test: if any measure is a balance/inventory/headcount figure it is the ideal semi-additive prototype; if not, semi-additivity stays a real-estate-era concern and only the hierarchy object below is exercised.
+
+The hierarchy object remains a bet to validate before building. A new type: hierarchy concept file lists the ordered levels and, per level, the governed dimension that realises it (realised_by: kp:StoreCountry). It carries only the sliver Malloy structurally cannot: the ordering of the rungs, their contested business names ("is Kraków a Market or a Submarket?"), and the existence of more than one valid ladder over the same leaves. It must not re-declare containment — which store is in which country stays in the Malloy joins; duplicating it is the join-map mistake in another costume. Note the boundary precisely: contested or multi-ladder structure is KP meaning; skip-level / variable-depth structure (some units under a Building, others directly under Property) is a data-shape problem Malloy's join paths already handle and is not a reason to reach for this object — that is the DuckGQL note's territory. A new type is not a small change: it touches okf-lib parsing, a new node kind in the graph/viewer, the routing table, and validation that each level's realised_by resolves to a real dimension. Prototype the schema cheaply against Contoso geography (Store→Country→Continent) to get levels, realised_by, and the level-resolution check right; then hold the full build until a qualifying hierarchy makes it load-bearing.
+
+Naming-as-identity — decide this week, independent of the trigger. If a measure means genuinely different things at different grains, those are distinct URIs, not one URI at two grains — and the convention is cheap now, expensive to retrofit after people have written a bare kp:Occupancy for a year. Use a fast structural pre-filter, then a definitive tiebreaker:
+
+Pre-filter: different numerator/denominator structure → likely distinct URIs; same quantity recomputed at different grain → likely one URI. (Exclude currency and unit-of-presentation: revenue in USD vs EUR is one concept with a given/parameter, not two URIs.)
+Tiebreaker when the pre-filter is ambiguous: could a single Malloy measure, defined once at the leaf grain, recompute this correctly at every level? If yes → one URI. If the definition itself changes with level — a different filter, a different weighting, or a different question being asked (unit occupancy "is this let?" vs portfolio occupancy "area-weighted %") → distinct URIs. This decides on the thing that actually matters — one computation or several — rather than on surface features that can mislead.
+
+The common case — one measure rolled up a hierarchy (NOI at six levels) — stays a single concept. Write the convention down before the first hierarchical measure is authored.
+
+Note on tooling (do not act): a graph-query engine over the containment structure (e.g. DuckGQL's variable-length MATCH) is a data-plane option for deep, ragged (variable-depth) hierarchies if Malloy's join-path traversal ever becomes a measured performance problem — not a knowledge-plane tool, and not a substitute for the ordered-level meaning above. File in memory; no roadmap action until real hierarchical data shows Malloy struggling with depth.
 
 ### OPT-5 · Change classification + impact detection
 
