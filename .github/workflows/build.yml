@@ -18,6 +18,15 @@ name: build
 
 on:
   pull_request:
+    # Docs-only PRs change nothing the KP validation or write-back can react to.
+    # Keep this to TRUE docs — concept files, CLAUDE.md and models/ are the whole
+    # point of this gate, so never broaden to `**.md`. A PR touching any
+    # non-ignored path still runs the full build.
+    paths-ignore:
+      - 'ROADMAP.md'
+      - 'README.md'
+      - 'LICENSE'
+      - 'docs/**'
   push:
     branches: [main]
 
