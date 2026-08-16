@@ -23,6 +23,16 @@ name: eval
 
 on:
   pull_request:
+    # Docs-only PRs don't touch anything a case fingerprint depends on, so the
+    # sweep would spin up only to skip every case. Skip the whole job instead.
+    # NOTE: keep this to TRUE docs. Concept files, CLAUDE.md and
+    # kp/agent/examples.md are .md too and DO move verdicts — never add `**.md`.
+    # A PR that touches any non-ignored path still runs the full sweep.
+    paths-ignore:
+      - 'ROADMAP.md'
+      - 'README.md'
+      - 'LICENSE'
+      - 'docs/**'
   push:
     branches: [main]
   schedule:
