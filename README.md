@@ -10,7 +10,7 @@ This is a second experiment (first one is here: https://github.com/wwasilak/mall
 Knowledge Plane (kp, also Context Layer) contains the meaning part – business concepts, definitions, relationships, governance. For this part
 Google's Open Knowledge Format is used. As kp can contain hundreds of files, Excel template was also created - it can be generated from kp files and used by the Business Users to fill in the concepts and definitions. Python script extracts the data from Excel and converts it to okf bundle.
 
-Semantic layer is implemented via the Malloy language. Malloy models have defined sources, joins, measures, dimensions and views. It allows the agent to perform calculations in a repeatable, accurate way.
+Semantic layer is implemented via the Malloy language. Malloy model define sources, joins, measures, dimensions and views. It allows the agent to perform calculations in a repeatable, accurate way.
 
 Concepts in the knowledge plane are linked to objects in the semantic layer. The relationship between those two layer is one-to-many, so concepts are never duplicated. Links, when a question in natural language is asked, allow the agent to quickly route to apropriate Malloy model. 
 
