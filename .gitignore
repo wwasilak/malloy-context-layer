@@ -22,3 +22,8 @@ knowledge_plane_workbook.xlsx
 # not product regression history — it accumulates on every self-test run and is
 # regenerable, so it is ephemeral and not tracked.
 evals/results/selftest/
+
+publisher_data/
+publisher.db
+publisher.db.wal
+*.db.wal
