@@ -1,6 +1,7 @@
 {
   "name": "malloy-knowledge-plane-okf",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "build": "cross-env MODELS_DIR=models node scripts/build.js",
     "build:check": "cross-env MODELS_DIR=models node scripts/build.js --check",

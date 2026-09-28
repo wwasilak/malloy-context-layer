@@ -104,3 +104,11 @@ npm run eval:report    # pass rate by category + what flipped since last run
 - Built mostly in conversation with Claude. Earlier iterations used a MOTLY
   Knowledge Plane and a generated `knowledge_map.json`; both are gone — the OKF
   bundle replaced them.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+The sample data in `data/` was produced with SQLBI's
+[Contoso Data Generator](https://github.com/sql-bi/Contoso-Data-Generator) and
+is redistributed under its own MIT license — see [data/LICENSE](data/LICENSE).
