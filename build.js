@@ -4,7 +4,7 @@
 //            compiled Malloy models, then project the links back into the bundle.
 //
 //   The KP is now a directory of markdown files with YAML frontmatter (OKF).
-//   Malloy models are UNCHANGED: they still link via `# concept = "kp:..."`.
+//   Malloy models are UNCHANGED: they link via `#(kp) concept = "kp:..."` (INT-7).
 //   Models are COMPILED (not regex-scanned); annotations via parseAsTag().
 //
 //   HARD-FAILS if a model references a URI with no concept file, or if a KP
@@ -28,7 +28,7 @@ const WORKDIR    = process.env.WORKDIR    || process.cwd();
 // ---- helpers: pull tag values via the Annotations view (unchanged from v2) --
 function tagValue(entity, prop) {
   if (!entity || !entity.annotations || typeof entity.annotations.parseAsTag !== 'function') return null;
-  const tag = entity.annotations.parseAsTag().tag;
+  const tag = entity.annotations.parseAsTag('kp').tag;   // INT-7: our own #(kp) route
   const p = tag && tag.properties && tag.properties[prop];
   return p && p.eq ? p.eq : null;
 }
@@ -46,7 +46,7 @@ function modelTagOf(model) {
 // (v2 only kept which concepts a source touches; v3 keeps (source, field) so
 //  the write-back can render real Implementations tables.)
 // The connect/load/definedHere plumbing lives in malloy-lib (SIMP-3); what is
-// build-specific is everything below it — reading # concept annotations.
+// build-specific is everything below it — reading #(kp) concept annotations.
 async function compileModel(filePath) {
   // (filePath is returned so the coverage probe can reload the right model)
   const { model, definedHere } = await mal.loadModelFile(filePath, { workdir: WORKDIR });
@@ -58,7 +58,7 @@ async function compileModel(filePath) {
     const fieldConcepts = [];   // [{concept, field}]
     const joinRoles = [];
     const views = [];           // pre-built query surfaces (turtles/views)
-    const ungoverned = [];      // fields with no # concept annotation
+    const ungoverned = [];      // fields with no #(kp) concept annotation
     for (const f of exp.allFields) {
       if (!definedHere(f.location)) continue;
       const ctor = f.constructor ? f.constructor.name : '';
@@ -210,7 +210,7 @@ async function compileModel(filePath) {
     for (const [srcName, s] of Object.entries(m.sources)) {
       const un = (s.ungoverned || []);
       if (un.length)
-        warnings.push(`[coverage] built but ungoverned in ${m.model}.${srcName}: ${un.join(', ')} — fields with no # concept annotation`);
+        warnings.push(`[coverage] built but ungoverned in ${m.model}.${srcName}: ${un.join(', ')} — fields with no #(kp) concept annotation`);
     }
   warnings.length && console.warn(warnings.filter(w => w.startsWith('[coverage]')).map(w => '  WARN ' + w).join('\n'));
 

@@ -56,7 +56,7 @@ runtime-neutral (it's just files + CLAUDE.md).
 
 ## C) Links
 
-Declared in Malloy (`# concept = "kp:..."` on sources/fields, `# is_about_role`
+Declared in Malloy (`#(kp) concept = "kp:..."` on sources/fields, `#(kp) is_about_role`
 on joins) — owned by developers, guarded by the compiler. Projected back into
 the plane by the build: every concept file gets its Implementations table, and
 the root `kp/index.md` becomes the agent routing table (concept | kind | status
@@ -72,7 +72,7 @@ separate knowledge_map.json — the bundle IS the agent context.
 4. Drift sensor: declared `of:` vs the entity of the source the field is
    actually implemented on -> WARN.
 5. Coverage: governed-but-unbuilt concepts (`status: stable` + human `verified`,
-   no implementation) -> hard fail; built-but-ungoverned fields (no # concept
+   no implementation) -> hard fail; built-but-ungoverned fields (no #(kp) concept
    annotation) -> WARN.
 6. Write-back: Implementations tables, routing table (root index), domain
    indexes, data coverage (min/max of bundle.yaml `temporal_anchor`), views.

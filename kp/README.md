@@ -11,7 +11,7 @@ Canonical business concepts, one markdown file per concept, in the
   `npm run build` — never edit those by hand.
 - New concept? Copy the matching file from `_templates/`, set `status: draft`.
   The exporter only publishes `approved` concepts to the agent map.
-- Malloy models link here via `# concept = "kp:..."` annotations. The build
+- Malloy models link here via `#(kp) concept = "kp:..."` annotations. The build
   hard-fails if an annotation points at a URI that has no file here.
 
 ## Global vs local, and promotion

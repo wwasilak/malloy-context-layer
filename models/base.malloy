@@ -16,7 +16,7 @@ given:
 # model = "base"
 
 // ---------- CURRENCY EXCHANGE RATE ----------
-# concept = "kp:CurrencyExchangeRate"
+#(kp) concept = "kp:CurrencyExchangeRate"
 source: currency_exchange_rate is duckdb.table('ParquetFiles/currencyexchange.parquet')
   include {
     public: FromCurrency, ToCurrency, `Date`
@@ -24,20 +24,20 @@ source: currency_exchange_rate is duckdb.table('ParquetFiles/currencyexchange.pa
   }
 
 // ---------- CUSTOMER ----------
-# concept = "kp:Customer"
+#(kp) concept = "kp:Customer"
 source: customer is duckdb.table('ParquetFiles/customer.parquet')
   include {
     public:  GeoAreaKey
     
-    # concept = "kp:CustomerAge"
+    #(kp) concept = "kp:CustomerAge"
     Age
-    # concept = "kp:CustomerGender"
+    #(kp) concept = "kp:CustomerGender"
     Gender
-    # concept = "kp:CustomerOccupation"
+    #(kp) concept = "kp:CustomerOccupation"
     Occupation
-    # concept = "kp:CustomerCountry"
+    #(kp) concept = "kp:CustomerCountry"
     Country
-    # concept = "kp:CustomerCity"
+    #(kp) concept = "kp:CustomerCity"
     City
     CustomerKey,
     Birthday, Company, Continent, CountryFull, EndDT, GivenName, Latitude,
@@ -49,7 +49,7 @@ source: customer is duckdb.table('ParquetFiles/customer.parquet')
   }
 
 // ---------- CALENDAR DATE ----------
-# concept = "kp:CalendarDate"
+#(kp) concept = "kp:CalendarDate"
 source: calendar_date is duckdb.table('ParquetFiles/date.parquet')
   include {
     public: DateKey
@@ -63,13 +63,13 @@ source: calendar_date is duckdb.table('ParquetFiles/date.parquet')
   }
 
 // ---------- STORE ----------
-# concept = "kp:Store"
+#(kp) concept = "kp:Store"
 source: store is duckdb.table('ParquetFiles/store.parquet')
   include {
     public: 
     StoreKey, GeoAreaKey
     
-    # concept = "kp:StoreCountry"
+    #(kp) concept = "kp:StoreCountry"
     CountryName
 
     CloseDate, CountryCode, Description, OpenDate, SquareMeters, State,
@@ -80,18 +80,18 @@ source: store is duckdb.table('ParquetFiles/store.parquet')
   }
 
 // ---------- PRODUCT ----------
-# concept = "kp:Product"
+#(kp) concept = "kp:Product"
 source: product is duckdb.table('ParquetFiles/product.parquet')
   include {
      public: ProductKey, CategoryKey, SubCategoryKey
     
-    # concept = "kp:ProductBrand"
+    #(kp) concept = "kp:ProductBrand"
     Brand
-    # concept = "kp:ProductCategory"
+    #(kp) concept = "kp:ProductCategory"
     CategoryName
-    # concept = "kp:ProductUnitCost"
+    #(kp) concept = "kp:ProductUnitCost"
     Cost
-    # concept = "kp:ProductUnitPrice"
+    #(kp) concept = "kp:ProductUnitPrice"
     Price
 
     Color, Manufacturer, ProductCode, ProductName, SubCategoryName,
@@ -102,24 +102,24 @@ source: product is duckdb.table('ParquetFiles/product.parquet')
   }
 
 // ---------- ORDER LINE ----------
-# concept = "kp:OrderLine"
+#(kp) concept = "kp:OrderLine"
 source: order_line is duckdb.table('ParquetFiles/orderrows.parquet')
   include {
     public: OrderKey, ProductKey, RowNumber, UnitPrice
     
-    # concept = "kp:LineQuantity"
+    #(kp) concept = "kp:LineQuantity"
     Quantity
 
     NetPrice, UnitCost
   }
 
 // ---------- ORDER ----------
-# concept = "kp:Order"
+#(kp) concept = "kp:Order"
 source: order is duckdb.table('ParquetFiles/orders.parquet')
   include {
     public: OrderKey, StoreKey
     
-    # concept = "kp:OrderDate"
+    #(kp) concept = "kp:OrderDate"
     DT
 
     DeliveryDate, CustomerKey, CurrencyCode
@@ -135,70 +135,70 @@ source: order is duckdb.table('ParquetFiles/orders.parquet')
 
 
 // ---------- CUSTOMER_ORDER_IN_CONTEXT ----------
-# concept = "kp:Customer"
+#(kp) concept = "kp:Customer"
 source: customer_order_in_context is customer extend {
   join_many: made_an_order is order on made_an_order.CustomerKey = CustomerKey
 
   measure:
-  # concept = "kp:ActiveCustomer"
+  #(kp) concept = "kp:ActiveCustomer"
   is_active_customer is made_an_order.count() { where: made_an_order.DT ~ f'last 2 years' } > 0
 }
 
 
 // ---------- ORDER_LINE_IN_CONTEXT ----------
-# concept = "kp:OrderLine"
+#(kp) concept = "kp:OrderLine"
 source: order_line_in_context(reporting_currency::string is "USD") is order_line extend {
 
-  # is_about_role = "kp:recordsSaleOf"
+  #(kp) is_about_role = "kp:recordsSaleOf"
   join_one: sold_product is product with ProductKey
 
   join_one: of_order is order on OrderKey = of_order.OrderKey
 
-  # is_about_role = "kp:isConvertedVia"
+  #(kp) is_about_role = "kp:isConvertedVia"
   join_one: converted_via is currency_exchange_rate on
         of_order.CurrencyCode = converted_via.FromCurrency
     and of_order.DT           = converted_via.`Date`
     and converted_via.ToCurrency = reporting_currency
 
   dimension:
-  # concept = "kp:LineRevenue"
+  #(kp) concept = "kp:LineRevenue"
   line_revenue is (Quantity * NetPrice) * converted_via.Exchange
-  # concept = "kp:LineCost"
+  #(kp) concept = "kp:LineCost"
   line_cost   is (Quantity * UnitCost) * converted_via.Exchange
-  # concept = "kp:LineListRevenue"
+  #(kp) concept = "kp:LineListRevenue"
   line_list_revenue is (Quantity * UnitPrice) * converted_via.Exchange
-  # concept = "kp:LineDiscount"
+  #(kp) concept = "kp:LineDiscount"
   line_discount is ((UnitPrice - NetPrice) * Quantity) * converted_via.Exchange
 }
 
 
 // ---------- SALES_ORDER — core order fact every department builds on ----------
-# concept = "kp:Order"
+#(kp) concept = "kp:Order"
 source: sales_order(reporting_currency::string is "USD") is order extend {
 
-  # is_about_role = "kp:isPlacedBy"
+  #(kp) is_about_role = "kp:isPlacedBy"
   join_one: placed_by is customer with CustomerKey
-  # is_about_role = "kp:isPlacedAt"
+  #(kp) is_about_role = "kp:isPlacedAt"
   join_one: placed_at is store with StoreKey
-  # is_about_role = "kp:occursOn"
+  #(kp) is_about_role = "kp:occursOn"
   join_one: occurs_on is calendar_date on DT = occurs_on.`Date`
-  # is_about_role = "kp:consistsOf"
+  #(kp) is_about_role = "kp:consistsOf"
   join_many: lines is order_line_in_context(reporting_currency is reporting_currency)
     on OrderKey = lines.OrderKey
 
   dimension:
-  # concept = "kp:SalesChannel"
+  #(kp) concept = "kp:SalesChannel"
   channel is pick 'Online' when placed_at.CountryName = 'Online' else 'Physical store'
 
   measure:
-  # concept = "kp:OrderCount"
+  #(kp) concept = "kp:OrderCount"
   order_count is count()
-  # concept = "kp:TotalSales"
+  #(kp) concept = "kp:TotalSales"
   total_sales is lines.line_revenue.sum()
-  # concept = "kp:TotalCost"
+  #(kp) concept = "kp:TotalCost"
   total_cost is lines.line_cost.sum()
-  # concept = "kp:Margin"
+  #(kp) concept = "kp:Margin"
   margin is total_sales - total_cost
-  # concept = "kp:MarginPercent"
+  #(kp) concept = "kp:MarginPercent"
   margin_percent is margin / total_sales
 }

@@ -9,17 +9,17 @@ import "base.malloy"
 
 // ---------- SALES_PERFORMANCE — basket & volume KPIs on top of sales_order ----
 # model = "sales"
-# concept = "kp:Order"
+#(kp) concept = "kp:Order"
 source: sales_performance(reporting_currency::string is "USD") is
   sales_order(reporting_currency is reporting_currency) extend {
 
   measure:
-  # concept = "kp:TotalUnits"
+  #(kp) concept = "kp:TotalUnits"
   total_units is lines.Quantity.sum()
-  # concept = "kp:LineCount"
+  #(kp) concept = "kp:LineCount"
   line_count is lines.count()
-  # concept = "kp:AverageOrderValue"
+  #(kp) concept = "kp:AverageOrderValue"
   average_order_value is total_sales / order_count
-  # concept = "kp:UnitsPerOrder"
+  #(kp) concept = "kp:UnitsPerOrder"
   units_per_order is total_units / order_count
 }

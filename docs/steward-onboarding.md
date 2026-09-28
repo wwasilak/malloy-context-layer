@@ -15,7 +15,7 @@ YAML frontmatter at the top. The folder a file lives in is its **tier**:
 `kp/global/` = company-wide definitions with no single owner; `kp/sales/`,
 `kp/finance/`, `kp/merchandising/`, `kp/operations/` = local, one steward each.
 Identity is the `uri:` field, never the filename or folder. The Malloy models in
-`models/` link to your concept by its `uri` (a `# concept = "kp:..."` annotation
+`models/` link to your concept by its `uri` (a `#(kp) concept = "kp:..."` annotation
 a developer owns) — so a definition lives in exactly one place and is never
 copied into a model.
 

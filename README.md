@@ -29,7 +29,7 @@ Two artifacts in git, one build command, links between them:
 2. **`models/` — the Malloy models**, the Data Plane. `base.malloy` holds all the
   plumbing (sources, in-context sources, universal measures); the thin
   department models `import "base.malloy"` and extend it. Fields link to a
-  concept with a `# concept = "kp:..."` annotation, so meaning lives in one place.
+  concept with a `#(kp) concept = "kp:..."` annotation, so meaning lives in one place.
 
 3. **`build.js` — the link.** It validates the bundle, compiles every model,
   checks every annotation resolves to a real concept (and every

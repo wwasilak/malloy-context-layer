@@ -9,40 +9,40 @@ import "base.malloy"
 
 // ---------- PRODUCT_PERFORMANCE — product-centric assortment & margin --------
 # model = "merchandising"
-# concept = "kp:Product"
+#(kp) concept = "kp:Product"
 source: product_performance(reporting_currency::string is "USD") is product extend {
 
-  # is_about_role = "kp:recordsSaleOf"
+  #(kp) is_about_role = "kp:recordsSaleOf"
   join_many: lines is order_line_in_context(reporting_currency is reporting_currency)
     on ProductKey = lines.ProductKey
 
   dimension:
-  # concept = "kp:ProductSubCategory"
+  #(kp) concept = "kp:ProductSubCategory"
   sub_category is SubCategoryName
-  # concept = "kp:ProductColor"
+  #(kp) concept = "kp:ProductColor"
   color is Color
-  # concept = "kp:ProductManufacturer"
+  #(kp) concept = "kp:ProductManufacturer"
   manufacturer is Manufacturer
 
   list_price_margin is (Price - Cost) / Price
 
   measure:
-  # concept = "kp:TotalSales"
+  #(kp) concept = "kp:TotalSales"
   total_sales is lines.line_revenue.sum()
-  # concept = "kp:Margin"
+  #(kp) concept = "kp:Margin"
   margin is lines.line_revenue.sum() - lines.line_cost.sum()
-  # concept = "kp:TotalUnits"
+  #(kp) concept = "kp:TotalUnits"
   total_units is lines.Quantity.sum()
-  # concept = "kp:ListPriceMarginPercent"
+  #(kp) concept = "kp:ListPriceMarginPercent"
   avg_list_price_margin_percent is list_price_margin.avg()
 }
 
 // ---------- PRODUCT_LINE — distinct products actually sold --------------------
-# concept = "kp:OrderLine"
+#(kp) concept = "kp:OrderLine"
 source: product_line(reporting_currency::string is "USD") is
   order_line_in_context(reporting_currency is reporting_currency) extend {
 
   measure:
-  # concept = "kp:DistinctProductsSold"
+  #(kp) concept = "kp:DistinctProductsSold"
   distinct_products_sold is sold_product.count()
 }
