@@ -22,7 +22,7 @@
 //   Usage: npm run eval:report [-- --view <name>]
 // =============================================================================
 const path = require('path');
-const mal = require('../malloy-lib');
+const mal = require('../scripts/malloy-lib');
 
 const MODEL = path.join('evals', 'results.malloy');
 const num = (v) => (typeof v === 'bigint' ? Number(v) : v);

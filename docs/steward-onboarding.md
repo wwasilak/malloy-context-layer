@@ -15,7 +15,7 @@ YAML frontmatter at the top. The folder a file lives in is its **tier**:
 `kp/global/` = company-wide definitions with no single owner; `kp/sales/`,
 `kp/finance/`, `kp/merchandising/`, `kp/operations/` = local, one steward each.
 Identity is the `uri:` field, never the filename or folder. The Malloy models in
-`models/` link to your concept by its `uri` (a `# concept = "kp:..."` annotation
+`models/` link to your concept by its `uri` (a `#(kp) concept = "kp:..."` annotation
 a developer owns) — so a definition lives in exactly one place and is never
 copied into a model.
 
@@ -103,7 +103,7 @@ governance gap) is a warning; worth acting on but doesn't block the build.
 
 ## Not comfortable in markdown?
 
-There's an Excel round-trip (`okf_to_excel.py` / `excel_to_okf.py`). If a
+There's an Excel round-trip (`scripts/okf_to_excel.py` / `scripts/excel_to_okf.py`). If a
 workbook cycle is in flight, **Excel owns the frontmatter fields it carries** —
 don't hand-edit those same files in parallel or the two paths fight. See
 [ARCHITECTURE.md](../ARCHITECTURE.md) → "Authoring surfaces".

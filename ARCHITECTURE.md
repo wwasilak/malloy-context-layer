@@ -42,8 +42,8 @@ candidates; humans promote.
 The bundle is canonical. Two ways in, one write path at a time:
 - **Direct edit** (default): VS Code / Obsidian on `kp/**`, reviewed via PR.
 - **Excel round-trip** (for stewards who won't touch markdown):
-  `python3 okf_to_excel.py` exports the bundle to `knowledge_plane_workbook.xlsx`;
-  `python3 excel_to_okf.py` imports it back (verified byte-identical on a full
+  `python3 scripts/okf_to_excel.py` exports the bundle to `knowledge_plane_workbook.xlsx`;
+  `python3 scripts/excel_to_okf.py` imports it back (verified byte-identical on a full
   cycle; generated Implementations blocks are preserved). Rule: while a
   workbook cycle is in flight, Excel owns the frontmatter fields it carries —
   do not hand-edit those same files in parallel.
@@ -56,14 +56,17 @@ runtime-neutral (it's just files + CLAUDE.md).
 
 ## C) Links
 
-Declared in Malloy (`# concept = "kp:..."` on sources/fields, `# is_about_role`
+Declared in Malloy (`#(kp) concept = "kp:..."` on sources/fields, `#(kp) is_about_role`
 on joins) — owned by developers, guarded by the compiler. Projected back into
 the plane by the build: every concept file gets its Implementations table, and
 the root `kp/index.md` becomes the agent routing table (concept | kind | status
 | definition | binding) plus data coverage and the views inventory. There is no
 separate knowledge_map.json — the bundle IS the agent context.
 
-## Build: `node build.js`
+## Build: `node scripts/build.js` (`npm run build`)
+
+All build and authoring scripts live in `scripts/`; they resolve `kp/` and
+`models/` against the working directory, so run them from the repo root.
 
 1. Load + validate bundle (frontmatter, unique URIs, subtype/of/relationship targets).
 2. Compile every model (imports resolve; annotations via the Annotations API).
@@ -72,15 +75,14 @@ separate knowledge_map.json — the bundle IS the agent context.
 4. Drift sensor: declared `of:` vs the entity of the source the field is
    actually implemented on -> WARN.
 5. Coverage: governed-but-unbuilt concepts (`status: stable` + human `verified`,
-   no implementation) -> hard fail; built-but-ungoverned fields (no # concept
+   no implementation) -> hard fail; built-but-ungoverned fields (no #(kp) concept
    annotation) -> WARN.
 6. Write-back: Implementations tables, routing table (root index), domain
    indexes, data coverage (min/max of bundle.yaml `temporal_anchor`), views.
-7. Regenerate both graphs — `kp_viz.html` (full plane) and
-   `kp_viz_conceptual.html` (entities/attributes/relationships only). Best
-   effort: needs GoogleCloudPlatform/knowledge-catalog cloned and a Python with
-   pyyaml (the build probes python3/python/py -3 and reports the real cause if
-   it can't).
+7. KP stamps (INT-1, `scripts/kp-stamp.js`): write each concept's `#"`
+   description and, where field-specific, `#(agent)` instruction into
+   `models/` next to its `#(kp)` link. `--check` validates everything and
+   writes nothing — the pre-commit hook.
 
 CI: run build on every PR; fail on errors; fail if the working tree is dirty
 after build (forces committed write-back). CODEOWNERS per domain folder.
@@ -119,7 +121,7 @@ and `kp/` are what gets tested, not a stub.
    `report.js` only prints them. The eval history is queryable with the tool
    under test.
 
-Data: the committed `ParquetFiles/` are the fixture set — hermetic and
+Data: the committed `data/` are the fixture set — hermetic and
 byte-identical in CI. `--live` switches WORKDIR for scheduled drift runs.
 
 CI (`.github/workflows/eval.yml`, separate from the build gate): the

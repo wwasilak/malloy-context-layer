@@ -1,7 +1,7 @@
 # The eval loop
 
 The build proves the plane is internally consistent: frontmatter validates, URIs
-are unique, every `# concept` annotation resolves, every `preferred_source`
+are unique, every `#(kp) concept` annotation resolves, every `preferred_source`
 points at a real source. It proves nothing about whether the agent, handed that
 plane plus `CLAUDE.md`, actually routes a question to the right concept, applies
 a membership rule verbatim, refuses an ungoverned term, or returns the right
@@ -134,7 +134,7 @@ The two search different text, deliberately:
 
 | check | searched | why |
 |---|---|---|
-| `must_use` | the **whole trace** — prose, every tool call, and what came back from tools | reaching for a concept counts however it shows up; a concept can be used in a query without being named in the answer. **The cost of that breadth:** the models carry `# concept` annotations, so a compile echoes the URIs back and `must_use` alone cannot prove the agent routed (see above) |
+| `must_use` | the **whole trace** — prose, every tool call, and what came back from tools | reaching for a concept counts however it shows up; a concept can be used in a query without being named in the answer. **The cost of that breadth:** the models carry `#(kp) concept` annotations, so a compile echoes the URIs back and `must_use` alone cannot prove the agent routed (see above) |
 | `must_not_contain` | only what the agent **committed to**: the final answer and the queries it actually executed | exploration is not commitment |
 
 Compiling an expression and then discarding it is the agent working correctly,
@@ -358,7 +358,7 @@ of a *selected* run is closer to $0.16 than $0.03.
 
 Numeric gold values rot when data moves. Two defences, both in use:
 
-1. **Fixtures freeze the numbers.** The parquet files under `ParquetFiles/` are
+1. **Fixtures freeze the numbers.** The parquet files under `data/` are
    committed to git, so CI checks out byte-identical data on every run. They
    already are the hermetic fixture set — there is deliberately no second
    sampled copy to keep in sync, and no "fixture vs live" gold discrepancy.
@@ -526,7 +526,7 @@ to prevent:
 
 `kp/agent/examples.md` and `kp/agent/corrections.md` stay **in**. Those are
 standing hints the agent reads and acts on: editing them can move a number,
-which is what "the meaning changed" means. Binary fixtures (`ParquetFiles/`)
+which is what "the meaning changed" means. Binary fixtures (`data/`)
 are always hashed byte-for-byte — no text normalisation is applied to them.
 
 ## Gold values
@@ -688,7 +688,7 @@ looks exactly like a thorough one. Two of the six were found hollow this way:
 
 | case | looked like | actually satisfied by |
 |---|---|---|
-| `financial-situation-projection` | 5 `must_use` concepts | compile output, which echoes `# concept` annotations from `models/` |
+| `financial-situation-projection` | 5 `must_use` concepts | compile output, which echoes `#(kp) concept` annotations from `models/` |
 | `aov-synonym` | `must_use` + `must_not_contain` + gold query shape | the routing table, which the **tier-1 prompt injects** |
 
 Both were fixed by asserting the one thing an ungoverned agent reliably fails to

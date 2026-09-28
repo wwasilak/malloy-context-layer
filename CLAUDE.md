@@ -246,16 +246,37 @@ Checking whether data exists (e.g. before refusing a gap as uncomputable) is a
 schema question, not a filesystem one — see the one-look rule under *When a
 term is NOT in the routing table*.
 
-**What you may write.** Only `kp/agent/gap-log.md`, `kp/agent/question-log.md`,
-`kp/agent/corrections.md`, and — when explicitly asked — a case under
-`evals/cases/`. `evals/` is harness code — never write anywhere else under it
-(not `evals/run.js`, not `evals/lib/`, not `evals/results/`); the sole exception
-is a case file under `evals/cases/`, and only when explicitly asked. Never write
-to `models/`: not a query file, not a scratch file, not a temporary one. Models are governed implementation and the build
-gates on them; compose queries inline instead. Never edit a concept file —
-meaning changes go through a reviewed PR by the steward. When you add a query
-shape to `examples.md`, compile it first: an example that does not compile
-teaches every future session the wrong syntax.
+**What you may write.**
+
+- **Logs:** `kp/agent/gap-log.md`, `kp/agent/question-log.md`,
+  `kp/agent/corrections.md`.
+- **Eval cases:** a case file under `evals/cases/`, and only when explicitly
+  asked. `evals/` is harness code: never write anywhere else under it (not
+  `evals/run.js`, not `evals/lib/`, not `evals/results/`).
+- **Examples:** when you add a query shape to `examples.md`, compile it first.
+  An example that does not compile teaches every future session the wrong syntax.
+- **Scratch:** write freely under `scratch/`. `.malloy` files there may import
+  `../models/*.malloy` and extend them with trial measures, derived sources, or
+  joins. `build.js` never reads `scratch/`. Anything computed from `scratch/` is
+  **exploratory**: label it so and never present it as a governed number. If a
+  finding should become governed, log it to `gap-log.md` with the scratch file
+  path. Promotion to `models/` goes through the steward.
+
+**What you must not write.**
+
+- **`models/`:** governed implementation, gated by the build. No query files,
+  scratch files, or temporary files, and no edits to measures or sources during
+  analysis. Compose queries inline, or prototype in `scratch/`.
+  Presentation-only exceptions, only when explicitly asked:
+  `models/public/**` (HTML data app, never `.malloy` files) and
+  `models/dashboards/**` (import from `../*.malloy` only, use existing
+  measures and dimensions, never define new business logic).
+- **Stamped annotations:** on fields, sources and the model that build.js
+  stamps, `#"` and `#(agent)` lines are generated. Never edit them by hand —
+  change the KP and rebuild. (`npm run build:check` fails on a hand-edited or
+  stale stamp; it runs as the git pre-commit hook.)
+- **Concept files:** never edit them. Meaning changes go through a reviewed PR
+  by the steward.
 
 ## Malloy dialect gotchas
 

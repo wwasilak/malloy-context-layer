@@ -16,28 +16,37 @@ given:
 # model = "base"
 
 // ---------- CURRENCY EXCHANGE RATE ----------
-# concept = "kp:CurrencyExchangeRate"
-source: currency_exchange_rate is duckdb.table('ParquetFiles/currencyexchange.parquet')
+#(kp) concept = "kp:CurrencyExchangeRate"
+#" The daily rate for converting an amount from one currency into a reporting currency
+#(agent) Currency Exchange Rate (kp:CurrencyExchangeRate; finance domain, steward Finance).
+source: currency_exchange_rate is duckdb.table('data/currencyexchange.parquet')
   include {
     public: FromCurrency, ToCurrency, `Date`
      Exchange
   }
 
 // ---------- CUSTOMER ----------
-# concept = "kp:Customer"
-source: customer is duckdb.table('ParquetFiles/customer.parquet')
+#(kp) concept = "kp:Customer"
+#" A natural or legal person who buys products from the company
+#(agent) Customer (kp:Customer; sales domain, steward Sales). Preferred source for kp:Customer: base.customer_order_in_context.
+source: customer is duckdb.table('data/customer.parquet')
   include {
     public:  GeoAreaKey
     
-    # concept = "kp:CustomerAge"
+    #(kp) concept = "kp:CustomerAge"
+    #" Age of the customer in years
     Age
-    # concept = "kp:CustomerGender"
+    #(kp) concept = "kp:CustomerGender"
+    #" Gender of the customer
     Gender
-    # concept = "kp:CustomerOccupation"
+    #(kp) concept = "kp:CustomerOccupation"
+    #" Stated occupation of the customer
     Occupation
-    # concept = "kp:CustomerCountry"
+    #(kp) concept = "kp:CustomerCountry"
+    #" Country of residence of the customer
     Country
-    # concept = "kp:CustomerCity"
+    #(kp) concept = "kp:CustomerCity"
+    #" City of residence of the customer
     City
     CustomerKey,
     Birthday, Company, Continent, CountryFull, EndDT, GivenName, Latitude,
@@ -49,8 +58,10 @@ source: customer is duckdb.table('ParquetFiles/customer.parquet')
   }
 
 // ---------- CALENDAR DATE ----------
-# concept = "kp:CalendarDate"
-source: calendar_date is duckdb.table('ParquetFiles/date.parquet')
+#(kp) concept = "kp:CalendarDate"
+#" A single calendar day, used as the temporal anchor for transactions and reporting periods
+#(agent) Calendar Date (kp:CalendarDate; finance domain, steward Finance).
+source: calendar_date is duckdb.table('data/date.parquet')
   include {
     public: DateKey
 
@@ -63,13 +74,16 @@ source: calendar_date is duckdb.table('ParquetFiles/date.parquet')
   }
 
 // ---------- STORE ----------
-# concept = "kp:Store"
-source: store is duckdb.table('ParquetFiles/store.parquet')
+#(kp) concept = "kp:Store"
+#" A physical or online point of sale where orders are placed
+#(agent) Store (kp:Store; operations domain, steward Retail Operations).
+source: store is duckdb.table('data/store.parquet')
   include {
     public: 
     StoreKey, GeoAreaKey
     
-    # concept = "kp:StoreCountry"
+    #(kp) concept = "kp:StoreCountry"
+    #" Country in which the store operates
     CountryName
 
     CloseDate, CountryCode, Description, OpenDate, SquareMeters, State,
@@ -80,18 +94,24 @@ source: store is duckdb.table('ParquetFiles/store.parquet')
   }
 
 // ---------- PRODUCT ----------
-# concept = "kp:Product"
-source: product is duckdb.table('ParquetFiles/product.parquet')
+#(kp) concept = "kp:Product"
+#" A sellable item offered to customers, identified by a stable product key
+#(agent) Product (kp:Product; merchandising domain, steward Merchandising).
+source: product is duckdb.table('data/product.parquet')
   include {
      public: ProductKey, CategoryKey, SubCategoryKey
     
-    # concept = "kp:ProductBrand"
+    #(kp) concept = "kp:ProductBrand"
+    #" Brand under which the product is sold
     Brand
-    # concept = "kp:ProductCategory"
+    #(kp) concept = "kp:ProductCategory"
+    #" Top-level merchandising category of the product
     CategoryName
-    # concept = "kp:ProductUnitCost"
+    #(kp) concept = "kp:ProductUnitCost"
+    #" Cost to the company of one unit of the product
     Cost
-    # concept = "kp:ProductUnitPrice"
+    #(kp) concept = "kp:ProductUnitPrice"
+    #" List selling price of one unit of the product
     Price
 
     Color, Manufacturer, ProductCode, ProductName, SubCategoryName,
@@ -102,24 +122,30 @@ source: product is duckdb.table('ParquetFiles/product.parquet')
   }
 
 // ---------- ORDER LINE ----------
-# concept = "kp:OrderLine"
-source: order_line is duckdb.table('ParquetFiles/orderrows.parquet')
+#(kp) concept = "kp:OrderLine"
+#" A single line on an order, recording one product, its quantity and the prices applied at sale time
+#(agent) Order Line (kp:OrderLine; sales domain, steward Sales). Preferred source for kp:OrderLine: base.order_line_in_context.
+source: order_line is duckdb.table('data/orderrows.parquet')
   include {
     public: OrderKey, ProductKey, RowNumber, UnitPrice
     
-    # concept = "kp:LineQuantity"
+    #(kp) concept = "kp:LineQuantity"
+    #" Number of product units on the order line
     Quantity
 
     NetPrice, UnitCost
   }
 
 // ---------- ORDER ----------
-# concept = "kp:Order"
-source: order is duckdb.table('ParquetFiles/orders.parquet')
+#(kp) concept = "kp:Order"
+#" A purchase transaction placed by a customer at a store on a given date, composed of one or more order lines
+#(agent) Order (kp:Order; sales domain, steward Sales). Preferred source for kp:Order: base.sales_order.
+source: order is duckdb.table('data/orders.parquet')
   include {
     public: OrderKey, StoreKey
     
-    # concept = "kp:OrderDate"
+    #(kp) concept = "kp:OrderDate"
+    #" The calendar date on which the order was placed
     DT
 
     DeliveryDate, CustomerKey, CurrencyCode
@@ -135,70 +161,82 @@ source: order is duckdb.table('ParquetFiles/orders.parquet')
 
 
 // ---------- CUSTOMER_ORDER_IN_CONTEXT ----------
-# concept = "kp:Customer"
+#(kp) concept = "kp:Customer"
 source: customer_order_in_context is customer extend {
   join_many: made_an_order is order on made_an_order.CustomerKey = CustomerKey
 
   measure:
-  # concept = "kp:ActiveCustomer"
+  #(kp) concept = "kp:ActiveCustomer"
+  #" A customer with at least one order in the last 2 years
+  #(agent) Membership: made_an_order count > 0 within last 2 years. Use this field; never hand-write the filter.
   is_active_customer is made_an_order.count() { where: made_an_order.DT ~ f'last 2 years' } > 0
 }
 
 
 // ---------- ORDER_LINE_IN_CONTEXT ----------
-# concept = "kp:OrderLine"
+#(kp) concept = "kp:OrderLine"
 source: order_line_in_context(reporting_currency::string is "USD") is order_line extend {
 
-  # is_about_role = "kp:recordsSaleOf"
+  #(kp) is_about_role = "kp:recordsSaleOf"
   join_one: sold_product is product with ProductKey
 
   join_one: of_order is order on OrderKey = of_order.OrderKey
 
-  # is_about_role = "kp:isConvertedVia"
+  #(kp) is_about_role = "kp:isConvertedVia"
   join_one: converted_via is currency_exchange_rate on
         of_order.CurrencyCode = converted_via.FromCurrency
     and of_order.DT           = converted_via.`Date`
     and converted_via.ToCurrency = reporting_currency
 
   dimension:
-  # concept = "kp:LineRevenue"
+  #(kp) concept = "kp:LineRevenue"
+  #" Gross revenue for one order line: quantity times net price
   line_revenue is (Quantity * NetPrice) * converted_via.Exchange
-  # concept = "kp:LineCost"
+  #(kp) concept = "kp:LineCost"
+  #" Cost of goods sold for one order line: quantity times unit cost
   line_cost   is (Quantity * UnitCost) * converted_via.Exchange
-  # concept = "kp:LineListRevenue"
+  #(kp) concept = "kp:LineListRevenue"
+  #" Revenue for one order line valued at list price (before discount): quantity times unit list price
   line_list_revenue is (Quantity * UnitPrice) * converted_via.Exchange
-  # concept = "kp:LineDiscount"
+  #(kp) concept = "kp:LineDiscount"
+  #" Discount given on one order line: quantity times (list price minus net price)
   line_discount is ((UnitPrice - NetPrice) * Quantity) * converted_via.Exchange
 }
 
 
 // ---------- SALES_ORDER — core order fact every department builds on ----------
-# concept = "kp:Order"
+#(kp) concept = "kp:Order"
 source: sales_order(reporting_currency::string is "USD") is order extend {
 
-  # is_about_role = "kp:isPlacedBy"
+  #(kp) is_about_role = "kp:isPlacedBy"
   join_one: placed_by is customer with CustomerKey
-  # is_about_role = "kp:isPlacedAt"
+  #(kp) is_about_role = "kp:isPlacedAt"
   join_one: placed_at is store with StoreKey
-  # is_about_role = "kp:occursOn"
+  #(kp) is_about_role = "kp:occursOn"
   join_one: occurs_on is calendar_date on DT = occurs_on.`Date`
-  # is_about_role = "kp:consistsOf"
+  #(kp) is_about_role = "kp:consistsOf"
   join_many: lines is order_line_in_context(reporting_currency is reporting_currency)
     on OrderKey = lines.OrderKey
 
   dimension:
-  # concept = "kp:SalesChannel"
+  #(kp) concept = "kp:SalesChannel"
+  #" The channel through which an order was placed: Online or Physical store
   channel is pick 'Online' when placed_at.CountryName = 'Online' else 'Physical store'
 
   measure:
-  # concept = "kp:OrderCount"
+  #(kp) concept = "kp:OrderCount"
+  #" Number of distinct orders in scope
   order_count is count()
-  # concept = "kp:TotalSales"
+  #(kp) concept = "kp:TotalSales"
+  #" Sum of line revenue across all order lines in scope
   total_sales is lines.line_revenue.sum()
-  # concept = "kp:TotalCost"
+  #(kp) concept = "kp:TotalCost"
+  #" Sum of line cost across all order lines in scope
   total_cost is lines.line_cost.sum()
-  # concept = "kp:Margin"
+  #(kp) concept = "kp:Margin"
+  #" Gross margin: total sales minus total cost
   margin is total_sales - total_cost
-  # concept = "kp:MarginPercent"
+  #(kp) concept = "kp:MarginPercent"
+  #" Gross margin expressed as a ratio of total sales
   margin_percent is margin / total_sales
 }

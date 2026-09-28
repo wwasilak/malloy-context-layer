@@ -9,44 +9,54 @@ import "base.malloy"
 
 // ---------- OPERATIONS_ORDER — fulfillment on top of the core order fact ------
 # model = "operations"
-# concept = "kp:Order"
+#(kp) concept = "kp:Order"
 source: operations_order(reporting_currency::string is "USD") is
   sales_order(reporting_currency is reporting_currency) extend {
 
   dimension:
-  # concept = "kp:DeliveryDays"
+  #(kp) concept = "kp:DeliveryDays"
+  #" Number of days between the order date and the delivery date for an order
   delivery_days is days(DT to DeliveryDate)
 
   measure:
-  # concept = "kp:AvgDeliveryDays"
+  #(kp) concept = "kp:AvgDeliveryDays"
+  #" Average number of days between order date and delivery date across orders in scope
   avg_delivery_days is avg(delivery_days)
-  # concept = "kp:DeliveredWithin3DaysRate"
+  #(kp) concept = "kp:DeliveredWithin3DaysRate"
+  #" Share of orders in scope delivered within three days of the order date
   delivered_within_3d_rate is count() { where: delivery_days <= 3 } / count()
 }
 
 // ---------- STORE_PORTFOLIO — store-centric productivity ----------------------
-# concept = "kp:Store"
+#(kp) concept = "kp:Store"
 source: store_portfolio(reporting_currency::string is "USD") is store extend {
 
-  # is_about_role = "kp:isPlacedAt"
+  #(kp) is_about_role = "kp:isPlacedAt"
   join_many: fulfilled_orders is sales_order(reporting_currency is reporting_currency)
     on fulfilled_orders.StoreKey = StoreKey
 
   dimension:
-  # concept = "kp:StoreSquareMeters"
+  #(kp) concept = "kp:StoreSquareMeters"
+  #" Selling floor area of a store, in square meters
   square_meters is SquareMeters
-  # concept = "kp:StoreStatus"
+  #(kp) concept = "kp:StoreStatus"
+  #" Operating status of a store, e.g. open or closed
   store_status is Status
-  # concept = "kp:StoreOpenDate"
+  #(kp) concept = "kp:StoreOpenDate"
+  #" The date on which a store opened for business
   store_open_date is OpenDate
 
   measure:
-  # concept = "kp:StoreCount"
+  #(kp) concept = "kp:StoreCount"
+  #" Number of distinct stores in scope
   store_count is count()
-  # concept = "kp:ActiveStoreCount"
+  #(kp) concept = "kp:ActiveStoreCount"
+  #" Number of stores in scope that are not closed
   active_store_count is count() { where: Status != 'Closed' }
-  # concept = "kp:TotalSales"
+  #(kp) concept = "kp:TotalSales"
+  #" Sum of line revenue across all order lines in scope
   total_sales is fulfilled_orders.total_sales
-  # concept = "kp:SalesPerSquareMeter"
+  #(kp) concept = "kp:SalesPerSquareMeter"
+  #" Total sales divided by total store selling area, a retail productivity measure
   sales_per_square_meter is fulfilled_orders.total_sales / SquareMeters.sum()
 }

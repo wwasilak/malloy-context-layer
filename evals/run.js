@@ -32,7 +32,7 @@ const { setFrontmatterField } = require('./lib/stamp');
 const { planeContext, selectCases, loadLedger } = require('./lib/select');
 const { runPool, serialize } = require('./lib/pool');
 const protocol = require('./lib/protocol');
-const okf = require('../okf-lib');
+const okf = require('../scripts/okf-lib');
 
 const KP_DIR = process.env.KP_DIR || 'kp';
 const RESULTS_DIR = process.env.EVAL_RESULTS_DIR || path.join('evals', 'results');
@@ -222,7 +222,7 @@ process.on('uncaughtException', (e) => { restoreNow(); console.error('FATAL:', e
   try {
     if (mode === 'fixtures') {
       const { treeDigest } = require('./lib/identity');
-      dataSource = `fixtures@${treeDigest('ParquetFiles').slice(0, 12)}`;
+      dataSource = `fixtures@${treeDigest('data', { exclude: ['LICENSE'] }).slice(0, 12)}`;
     } else {
       dataSource = `live@${workdir}`;
     }

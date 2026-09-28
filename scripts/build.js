@@ -4,7 +4,7 @@
 //            compiled Malloy models, then project the links back into the bundle.
 //
 //   The KP is now a directory of markdown files with YAML frontmatter (OKF).
-//   Malloy models are UNCHANGED: they still link via `# concept = "kp:..."`.
+//   Malloy models are UNCHANGED: they link via `#(kp) concept = "kp:..."` (INT-7).
 //   Models are COMPILED (not regex-scanned); annotations via parseAsTag().
 //
 //   HARD-FAILS if a model references a URI with no concept file, or if a KP
@@ -18,17 +18,21 @@ const fs = require('fs');
 const path = require('path');
 const okf = require('./okf-lib');
 const mal = require('./malloy-lib');
-const { checkGold } = require('./evals/lib/goldcheck');
-const evalMal = require('./evals/lib/malloy');
+const { stampText, sourceGraph, targetsFrom: stampTargets } = require('./kp-stamp');
+const { checkGold } = require('../evals/lib/goldcheck');
+const evalMal = require('../evals/lib/malloy');
 
 const KP_DIR     = process.env.KP_DIR     || 'kp';
 const MODELS_DIR = mal.MODELS_DIR;
 const WORKDIR    = process.env.WORKDIR    || process.cwd();
+// --check: validate only, write nothing (KP stamps, write-back). This is
+// the pre-commit hook (.githooks/pre-commit) — it must never dirty the tree.
+const CHECK      = process.argv.includes('--check');
 
 // ---- helpers: pull tag values via the Annotations view (unchanged from v2) --
 function tagValue(entity, prop) {
   if (!entity || !entity.annotations || typeof entity.annotations.parseAsTag !== 'function') return null;
-  const tag = entity.annotations.parseAsTag().tag;
+  const tag = entity.annotations.parseAsTag('kp').tag;   // INT-7: our own #(kp) route
   const p = tag && tag.properties && tag.properties[prop];
   return p && p.eq ? p.eq : null;
 }
@@ -46,19 +50,20 @@ function modelTagOf(model) {
 // (v2 only kept which concepts a source touches; v3 keeps (source, field) so
 //  the write-back can render real Implementations tables.)
 // The connect/load/definedHere plumbing lives in malloy-lib (SIMP-3); what is
-// build-specific is everything below it — reading # concept annotations.
+// build-specific is everything below it — reading #(kp) concept annotations.
 async function compileModel(filePath) {
   // (filePath is returned so the coverage probe can reload the right model)
   const { model, definedHere } = await mal.loadModelFile(filePath, { workdir: WORKDIR });
   const modelName = modelTagOf(model) || path.basename(filePath, '.malloy');
 
   const sources = {};
+  const unlinkedMeasureLines = [];   // INT-1: measures with no #(kp) link (0-based lines)
   for (const exp of model.explores) {
     if (!definedHere(exp.location)) continue;
     const fieldConcepts = [];   // [{concept, field}]
     const joinRoles = [];
     const views = [];           // pre-built query surfaces (turtles/views)
-    const ungoverned = [];      // fields with no # concept annotation
+    const ungoverned = [];      // fields with no #(kp) concept annotation
     for (const f of exp.allFields) {
       if (!definedHere(f.location)) continue;
       const ctor = f.constructor ? f.constructor.name : '';
@@ -69,7 +74,11 @@ async function compileModel(filePath) {
       if (isJoin && role) joinRoles.push(role);
       if (isView) views.push({ name: f.name, description: tagValue(f, 'description') });
       if (fc) fieldConcepts.push({ concept: fc, field: f.name });
-      else if (!isJoin && !isView) ungoverned.push(f.name);
+      else if (!isJoin && !isView) {
+        ungoverned.push(f.name);
+        if (typeof f.isCalculation === 'function' && f.isCalculation() && f.location)
+          unlinkedMeasureLines.push(f.location.range.start.line);
+      }
     }
     sources[exp.name] = { concept: conceptOf(exp), fieldConcepts, joinRoles, views, ungoverned };
   }
@@ -77,7 +86,7 @@ async function compileModel(filePath) {
   // the source index for the tier-0 gold checks below — recorded here so those
   // checks reuse this compile instead of paying for a second one.
   const exposes = model.explores.map(e => e.name);
-  return { model: modelName, sources, exposes, filePath };
+  return { model: modelName, sources, exposes, filePath, unlinkedMeasureLines };
 }
 
 // ---- main --------------------------------------------------------------------
@@ -192,6 +201,39 @@ async function compileModel(filePath) {
     }
   }
 
+  // 4d. INT-1: stamp the KP into the models in place (kp-stamp.js). After the
+  //     coverage probe because the model layer carries max_date; every file it
+  //     rewrites is recompiled so a bad stamp fails here. --check fails on drift
+  //     (a KP change not rebuilt, or a hand edit to a stamped line) instead of
+  //     writing — the `prettier --check` of the stamps.
+  {
+    const check = CHECK;
+    const targets = stampTargets(process.env.STAMP_TARGETS);
+    const files = mal.listModelFiles(MODELS_DIR);
+    const texts = files.map(f => fs.readFileSync(f, 'utf8'));
+    const graph = sourceGraph(texts);
+    const hasIndex = files.some(f => path.basename(f) === 'index.malloy');
+    if (!hasIndex) console.warn(`  WARN no ${MODELS_DIR}/index.malloy — model-level ##(agent) rules not stamped (INT-3b adds it)`);
+    const drift = [];
+    for (const [i, f] of files.entries()) {
+      const stamped = stampText(texts[i], { canon, graph, targets,
+        isIndex: path.basename(f) === 'index.malloy', maxDate: coverage && coverage.max_date,
+        unlinkedMeasureLines: (models.find(m => path.resolve(m.filePath) === path.resolve(f)) || {}).unlinkedMeasureLines });
+      if (stamped === texts[i]) continue;
+      drift.push(f);
+      if (check) continue;
+      fs.writeFileSync(f, stamped);
+      try { await mal.loadModelFile(f, { workdir: WORKDIR }); }
+      catch (e) { console.error(`\nBUILD FAILED — stamped ${f} does not compile: ${e.message || e}`); process.exit(1); }
+    }
+    if (check && drift.length) {
+      console.error('\nBUILD FAILED — KP stamps out of date or hand-edited (#" / #(agent) on #(kp)-linked items are generated; change the KP and run `npm run build`):');
+      drift.forEach(f => console.error('  ' + f));
+      process.exit(1);
+    }
+    console.log(`KP stamps (${targets.join(', ')}): ` + (drift.length ? `${drift.length} file(s) restamped` : 'all current'));
+  }
+
   // 5. coverage checks
   // A GOVERNED concept (status: stable + human-verified) with no implementation
   // is a definition the agent can route to and then cannot answer from — the
@@ -210,7 +252,7 @@ async function compileModel(filePath) {
     for (const [srcName, s] of Object.entries(m.sources)) {
       const un = (s.ungoverned || []);
       if (un.length)
-        warnings.push(`[coverage] built but ungoverned in ${m.model}.${srcName}: ${un.join(', ')} — fields with no # concept annotation`);
+        warnings.push(`[coverage] built but ungoverned in ${m.model}.${srcName}: ${un.join(', ')} — fields with no #(kp) concept annotation`);
     }
   warnings.length && console.warn(warnings.filter(w => w.startsWith('[coverage]')).map(w => '  WARN ' + w).join('\n'));
 
@@ -271,6 +313,8 @@ async function compileModel(filePath) {
     }
   }
 
+  if (CHECK) { console.log('\n--check: all validation passed; nothing written.'); return; }
+
   // 6. write everything back into the bundle (the bundle IS the agent context)
   const sourceConcepts = {};
   for (const m of models)
@@ -278,27 +322,6 @@ async function compileModel(filePath) {
       if (s.concept) sourceConcepts[`${m.model}.${srcName}`] = s.concept;
   const touched = okf.writeBack(KP_DIR, bundle, implementations, sourceConcepts,
                                 { views: viewInventory, coverage });
-
-  // 7. refresh the graphs (best effort — needs knowledge-catalog cloned + pyyaml)
-  //    `python3` is not a real interpreter on Windows (Store stub), so probe for
-  //    one that can actually import yaml rather than assuming a name.
-  const { execSync } = require('child_process');
-  const python = ['python3', 'python', 'py -3'].find(p => {
-    try { execSync(`${p} -c "import yaml"`, { stdio: 'pipe' }); return true; } catch { return false; }
-  });
-  if (!python)
-    console.log('(viz skipped — no python on PATH with pyyaml; run: pip install pyyaml)');
-  else
-    for (const [out, flag] of [['kp_viz.html', ''], ['kp_viz_conceptual.html', '--conceptual']]) {
-      try {
-        execSync(`${python} make_viz.py ${KP_DIR} ${out} ${flag}`, { stdio: 'pipe' });
-        console.log(`Graph refreshed -> ${out}`);
-      } catch (e) {
-        // surface the real cause instead of always blaming the missing clone
-        const why = String(e.stderr || e.message).trim().split('\n').pop();
-        console.log(`(viz skipped for ${out} — ${why})`);
-      }
-    }
 
   const shared = Object.keys(touch).filter(u => touch[u].size > 1);
   console.log('\nConcepts used: ' + Object.keys(touch).length + ' / ' + Object.keys(canon).length + ' canonical');

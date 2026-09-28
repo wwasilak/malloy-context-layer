@@ -9,40 +9,48 @@ import "base.malloy"
 
 // ---------- PRODUCT_PERFORMANCE — product-centric assortment & margin --------
 # model = "merchandising"
-# concept = "kp:Product"
+#(kp) concept = "kp:Product"
 source: product_performance(reporting_currency::string is "USD") is product extend {
 
-  # is_about_role = "kp:recordsSaleOf"
+  #(kp) is_about_role = "kp:recordsSaleOf"
   join_many: lines is order_line_in_context(reporting_currency is reporting_currency)
     on ProductKey = lines.ProductKey
 
   dimension:
-  # concept = "kp:ProductSubCategory"
+  #(kp) concept = "kp:ProductSubCategory"
+  #" Merchandising sub-category of the product, below its top-level category
   sub_category is SubCategoryName
-  # concept = "kp:ProductColor"
+  #(kp) concept = "kp:ProductColor"
+  #" Color the product is sold in
   color is Color
-  # concept = "kp:ProductManufacturer"
+  #(kp) concept = "kp:ProductManufacturer"
+  #" Manufacturer that produces the product
   manufacturer is Manufacturer
 
   list_price_margin is (Price - Cost) / Price
 
   measure:
-  # concept = "kp:TotalSales"
+  #(kp) concept = "kp:TotalSales"
+  #" Sum of line revenue across all order lines in scope
   total_sales is lines.line_revenue.sum()
-  # concept = "kp:Margin"
+  #(kp) concept = "kp:Margin"
+  #" Gross margin: total sales minus total cost
   margin is lines.line_revenue.sum() - lines.line_cost.sum()
-  # concept = "kp:TotalUnits"
+  #(kp) concept = "kp:TotalUnits"
+  #" Total number of product units sold across all order lines in scope
   total_units is lines.Quantity.sum()
-  # concept = "kp:ListPriceMarginPercent"
+  #(kp) concept = "kp:ListPriceMarginPercent"
+  #" Average catalog margin of products: (list price minus unit cost) divided by list price
   avg_list_price_margin_percent is list_price_margin.avg()
 }
 
 // ---------- PRODUCT_LINE — distinct products actually sold --------------------
-# concept = "kp:OrderLine"
+#(kp) concept = "kp:OrderLine"
 source: product_line(reporting_currency::string is "USD") is
   order_line_in_context(reporting_currency is reporting_currency) extend {
 
   measure:
-  # concept = "kp:DistinctProductsSold"
+  #(kp) concept = "kp:DistinctProductsSold"
+  #" Number of distinct products that appear on at least one order line in scope
   distinct_products_sold is sold_product.count()
 }

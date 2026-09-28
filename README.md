@@ -29,9 +29,9 @@ Two artifacts in git, one build command, links between them:
 2. **`models/` — the Malloy models**, the Data Plane. `base.malloy` holds all the
   plumbing (sources, in-context sources, universal measures); the thin
   department models `import "base.malloy"` and extend it. Fields link to a
-  concept with a `# concept = "kp:..."` annotation, so meaning lives in one place.
+  concept with a `#(kp) concept = "kp:..."` annotation, so meaning lives in one place.
 
-3. **`build.js` — the link.** It validates the bundle, compiles every model,
+3. **`scripts/build.js` — the link.** It validates the bundle, compiles every model,
   checks every annotation resolves to a real concept (and every
   `preferred_source` to a real source), then **writes the mapping back** into the
   bundle: each concept's `## Implementations` table and the root
@@ -54,7 +54,7 @@ definitions rather than improvised SQL.
 
 ## Getting started
 
-From the repo root (DuckDB resolves `ParquetFiles/...` relative to it):
+From the repo root (DuckDB resolves `data/...` relative to it):
 
 ```
 npm install
@@ -62,11 +62,17 @@ npm run build
 ```
 
 `npm run build` validates `kp/**` against `models/*.malloy` and regenerates the
-write-back (routing table, Implementations tables, indexes, and — if a
-`knowledge-catalog` clone and Python/pyyaml are present — the `kp_viz*.html`
-graphs). It **fails hard** on any validation error. CI runs the same command on
+write-back (routing table, Implementations tables, indexes). It **fails hard** on any validation error. CI runs the same command on
 every PR and additionally fails if the write-back left the tree dirty — see
 [`.github/workflows/build.yml`](.github/workflows/build.yml).
+
+The build also **stamps the KP into the models** (INT-1): each `#(kp)`-linked
+field and source gets a `#"` description and, where needed, an `#(agent)`
+instruction — the annotations Malloyyo serves to agents. Those lines are
+generated; change the KP, not the stamp. `npm run build:check` runs every
+validation read-only and fails if a stamp is stale or hand-edited. `npm install`
+enables it as a git pre-commit hook (`core.hooksPath=.githooks`); bypass in an
+emergency with `git commit --no-verify`.
 
 To run the eval loop (needs the `claude` CLI on PATH and the Malloy MCP server):
 
@@ -98,3 +104,11 @@ npm run eval:report    # pass rate by category + what flipped since last run
 - Built mostly in conversation with Claude. Earlier iterations used a MOTLY
   Knowledge Plane and a generated `knowledge_map.json`; both are gone — the OKF
   bundle replaced them.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+The sample data in `data/` was produced with SQLBI's
+[Contoso Data Generator](https://github.com/sql-bi/Contoso-Data-Generator) and
+is redistributed under its own MIT license — see [data/LICENSE](data/LICENSE).

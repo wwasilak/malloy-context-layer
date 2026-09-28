@@ -7,21 +7,21 @@
 //     2. canonicalise result sets so two queries can be compared for MEANING
 //        rather than for text (EVAL-2's "run both and diff" grading).
 //
-//   Data modes (EVAL-4). The parquet files under ParquetFiles/ are committed to
+//   Data modes (EVAL-4). The parquet files under data/ are committed to
 //   git, so they already ARE the hermetic fixture set: CI checks them out and
 //   gets byte-identical data, which is exactly what stable gold values need. We
 //   therefore do NOT ship a second sampled copy — `fixtures` means the
-//   committed ParquetFiles resolved relative to the repo root (the same WORKDIR
+//   committed data/ parquets resolved relative to the repo root (the same WORKDIR
 //   mechanism build.js uses), and `live` means an alternate WORKDIR/connection
 //   supplied by the environment for scheduled drift runs.
 // =============================================================================
 const fs = require('fs');
-const mal = require('../../malloy-lib');
+const mal = require('../../scripts/malloy-lib');
 
 const MODELS_DIR = mal.MODELS_DIR;
 const REPO_ROOT = process.cwd();
 
-// `fixtures` = committed ParquetFiles at the repo root. `live` = whatever
+// `fixtures` = committed data/ parquets at the repo root. `live` = whatever
 // EVAL_LIVE_WORKDIR points at (a mount or synced copy of the real warehouse
 // extract); it stays out of CI by construction.
 function workdirFor(mode) {
