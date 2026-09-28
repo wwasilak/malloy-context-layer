@@ -14,32 +14,43 @@ source: finance_order(reporting_currency::string is "USD") is
 
   dimension:
   #(kp) concept = "kp:OrderCurrency"
+  #" The original transaction currency in which an order was placed
   order_currency is CurrencyCode
 
   measure:
   // --- P&L in finance vocabulary (reuses the base measures, shared concepts) --
   #(kp) concept = "kp:TotalSales"
+  #" Sum of line revenue across all order lines in scope
   net_revenue is total_sales
   #(kp) concept = "kp:TotalCost"
+  #" Sum of line cost across all order lines in scope
   cost_of_goods_sold is total_cost
   #(kp) concept = "kp:Margin"
+  #" Gross margin: total sales minus total cost
   gross_profit is margin
   #(kp) concept = "kp:MarginPercent"
+  #" Gross margin expressed as a ratio of total sales
   gross_margin_percent is margin_percent
 
   // --- discount / markdown analysis (list price vs net price) ----------------
   #(kp) concept = "kp:GrossRevenue"
+  #" Total revenue valued at list price, before discounts, in the reporting currency
   gross_revenue is lines.line_list_revenue.sum()
   #(kp) concept = "kp:DiscountAmount"
+  #" Total discount given: gross (list) revenue minus net sales, in the reporting currency
   discount_amount is lines.line_discount.sum()
   #(kp) concept = "kp:DiscountRate"
+  #" Discount amount as a share of gross (list) revenue
   discount_rate is discount_amount / gross_revenue
 
   // --- pricing & FX ----------------------------------------------------------
   #(kp) concept = "kp:AverageSellingPrice"
+  #" Net sales divided by units sold; the average realized price per unit. (ASP)
   average_selling_price is total_sales / lines.Quantity.sum()
   #(kp) concept = "kp:MarkupPercent"
+  #" Gross margin expressed as a share of cost of goods sold: margin divided by total cost
   markup_percent is margin / total_cost
   #(kp) concept = "kp:AverageExchangeRate"
+  #" Average currency exchange rate applied to convert order lines into the reporting currency
   average_exchange_rate is lines.converted_via.Exchange.avg()
 }

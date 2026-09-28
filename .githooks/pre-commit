@@ -1,0 +1,9 @@
+#!/bin/sh
+# INT-1: refuse a commit whose models drift from the KP. `build.js --check`
+# runs every build validation (incl. KP stamps equal what the KP generates)
+# and writes nothing. Enabled by `npm install` (the `prepare` script sets
+# core.hooksPath=.githooks). Bypass in an emergency with `git commit --no-verify`.
+MODELS_DIR=models node build.js --check || {
+  echo "pre-commit: build --check failed. Run \`npm run build\` and commit the result." >&2
+  exit 1
+}

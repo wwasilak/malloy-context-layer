@@ -3,13 +3,15 @@
   "private": true,
   "scripts": {
     "build": "cross-env MODELS_DIR=models node build.js",
+    "build:check": "cross-env MODELS_DIR=models node build.js --check",
     "test": "node --test",
     "eval": "cross-env MODELS_DIR=models node evals/run.js",
     "eval:gold": "cross-env MODELS_DIR=models node evals/gold.js",
     "eval:check": "cross-env MODELS_DIR=models node evals/gold.js --check",
     "eval:report": "node evals/report.js",
     "eval:correlate": "cross-env MODELS_DIR=models node evals/correlate.js",
-    "eval:selftest": "cross-env MODELS_DIR=models node evals/selftest.js"
+    "eval:selftest": "cross-env MODELS_DIR=models node evals/selftest.js",
+    "prepare": "git config core.hooksPath .githooks"
   },
   "devDependencies": {
     "cross-env": "^7.0.3"

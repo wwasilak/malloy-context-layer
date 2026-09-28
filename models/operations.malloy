@@ -15,12 +15,15 @@ source: operations_order(reporting_currency::string is "USD") is
 
   dimension:
   #(kp) concept = "kp:DeliveryDays"
+  #" Number of days between the order date and the delivery date for an order
   delivery_days is days(DT to DeliveryDate)
 
   measure:
   #(kp) concept = "kp:AvgDeliveryDays"
+  #" Average number of days between order date and delivery date across orders in scope
   avg_delivery_days is avg(delivery_days)
   #(kp) concept = "kp:DeliveredWithin3DaysRate"
+  #" Share of orders in scope delivered within three days of the order date
   delivered_within_3d_rate is count() { where: delivery_days <= 3 } / count()
 }
 
@@ -34,19 +37,26 @@ source: store_portfolio(reporting_currency::string is "USD") is store extend {
 
   dimension:
   #(kp) concept = "kp:StoreSquareMeters"
+  #" Selling floor area of a store, in square meters
   square_meters is SquareMeters
   #(kp) concept = "kp:StoreStatus"
+  #" Operating status of a store, e.g. open or closed
   store_status is Status
   #(kp) concept = "kp:StoreOpenDate"
+  #" The date on which a store opened for business
   store_open_date is OpenDate
 
   measure:
   #(kp) concept = "kp:StoreCount"
+  #" Number of distinct stores in scope
   store_count is count()
   #(kp) concept = "kp:ActiveStoreCount"
+  #" Number of stores in scope that are not closed
   active_store_count is count() { where: Status != 'Closed' }
   #(kp) concept = "kp:TotalSales"
+  #" Sum of line revenue across all order lines in scope
   total_sales is fulfilled_orders.total_sales
   #(kp) concept = "kp:SalesPerSquareMeter"
+  #" Total sales divided by total store selling area, a retail productivity measure
   sales_per_square_meter is fulfilled_orders.total_sales / SquareMeters.sum()
 }

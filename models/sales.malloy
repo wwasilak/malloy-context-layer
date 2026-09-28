@@ -15,11 +15,15 @@ source: sales_performance(reporting_currency::string is "USD") is
 
   measure:
   #(kp) concept = "kp:TotalUnits"
+  #" Total number of product units sold across all order lines in scope
   total_units is lines.Quantity.sum()
   #(kp) concept = "kp:LineCount"
+  #" Number of order lines in scope
   line_count is lines.count()
   #(kp) concept = "kp:AverageOrderValue"
+  #" Average revenue per order: total sales divided by order count
   average_order_value is total_sales / order_count
   #(kp) concept = "kp:UnitsPerOrder"
+  #" Average number of product units per order: total units divided by order count
   units_per_order is total_units / order_count
 }

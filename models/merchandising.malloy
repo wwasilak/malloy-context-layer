@@ -18,22 +18,29 @@ source: product_performance(reporting_currency::string is "USD") is product exte
 
   dimension:
   #(kp) concept = "kp:ProductSubCategory"
+  #" Merchandising sub-category of the product, below its top-level category
   sub_category is SubCategoryName
   #(kp) concept = "kp:ProductColor"
+  #" Color the product is sold in
   color is Color
   #(kp) concept = "kp:ProductManufacturer"
+  #" Manufacturer that produces the product
   manufacturer is Manufacturer
 
   list_price_margin is (Price - Cost) / Price
 
   measure:
   #(kp) concept = "kp:TotalSales"
+  #" Sum of line revenue across all order lines in scope
   total_sales is lines.line_revenue.sum()
   #(kp) concept = "kp:Margin"
+  #" Gross margin: total sales minus total cost
   margin is lines.line_revenue.sum() - lines.line_cost.sum()
   #(kp) concept = "kp:TotalUnits"
+  #" Total number of product units sold across all order lines in scope
   total_units is lines.Quantity.sum()
   #(kp) concept = "kp:ListPriceMarginPercent"
+  #" Average catalog margin of products: (list price minus unit cost) divided by list price
   avg_list_price_margin_percent is list_price_margin.avg()
 }
 
@@ -44,5 +51,6 @@ source: product_line(reporting_currency::string is "USD") is
 
   measure:
   #(kp) concept = "kp:DistinctProductsSold"
+  #" Number of distinct products that appear on at least one order line in scope
   distinct_products_sold is sold_product.count()
 }

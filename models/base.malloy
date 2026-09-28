@@ -17,6 +17,8 @@ given:
 
 // ---------- CURRENCY EXCHANGE RATE ----------
 #(kp) concept = "kp:CurrencyExchangeRate"
+#" The daily rate for converting an amount from one currency into a reporting currency
+#(agent) Currency Exchange Rate (kp:CurrencyExchangeRate; finance domain, steward Finance).
 source: currency_exchange_rate is duckdb.table('ParquetFiles/currencyexchange.parquet')
   include {
     public: FromCurrency, ToCurrency, `Date`
@@ -25,19 +27,26 @@ source: currency_exchange_rate is duckdb.table('ParquetFiles/currencyexchange.pa
 
 // ---------- CUSTOMER ----------
 #(kp) concept = "kp:Customer"
+#" A natural or legal person who buys products from the company
+#(agent) Customer (kp:Customer; sales domain, steward Sales). Preferred source for kp:Customer: base.customer_order_in_context.
 source: customer is duckdb.table('ParquetFiles/customer.parquet')
   include {
     public:  GeoAreaKey
     
     #(kp) concept = "kp:CustomerAge"
+    #" Age of the customer in years
     Age
     #(kp) concept = "kp:CustomerGender"
+    #" Gender of the customer
     Gender
     #(kp) concept = "kp:CustomerOccupation"
+    #" Stated occupation of the customer
     Occupation
     #(kp) concept = "kp:CustomerCountry"
+    #" Country of residence of the customer
     Country
     #(kp) concept = "kp:CustomerCity"
+    #" City of residence of the customer
     City
     CustomerKey,
     Birthday, Company, Continent, CountryFull, EndDT, GivenName, Latitude,
@@ -50,6 +59,8 @@ source: customer is duckdb.table('ParquetFiles/customer.parquet')
 
 // ---------- CALENDAR DATE ----------
 #(kp) concept = "kp:CalendarDate"
+#" A single calendar day, used as the temporal anchor for transactions and reporting periods
+#(agent) Calendar Date (kp:CalendarDate; finance domain, steward Finance).
 source: calendar_date is duckdb.table('ParquetFiles/date.parquet')
   include {
     public: DateKey
@@ -64,12 +75,15 @@ source: calendar_date is duckdb.table('ParquetFiles/date.parquet')
 
 // ---------- STORE ----------
 #(kp) concept = "kp:Store"
+#" A physical or online point of sale where orders are placed
+#(agent) Store (kp:Store; operations domain, steward Retail Operations).
 source: store is duckdb.table('ParquetFiles/store.parquet')
   include {
     public: 
     StoreKey, GeoAreaKey
     
     #(kp) concept = "kp:StoreCountry"
+    #" Country in which the store operates
     CountryName
 
     CloseDate, CountryCode, Description, OpenDate, SquareMeters, State,
@@ -81,17 +95,23 @@ source: store is duckdb.table('ParquetFiles/store.parquet')
 
 // ---------- PRODUCT ----------
 #(kp) concept = "kp:Product"
+#" A sellable item offered to customers, identified by a stable product key
+#(agent) Product (kp:Product; merchandising domain, steward Merchandising).
 source: product is duckdb.table('ParquetFiles/product.parquet')
   include {
      public: ProductKey, CategoryKey, SubCategoryKey
     
     #(kp) concept = "kp:ProductBrand"
+    #" Brand under which the product is sold
     Brand
     #(kp) concept = "kp:ProductCategory"
+    #" Top-level merchandising category of the product
     CategoryName
     #(kp) concept = "kp:ProductUnitCost"
+    #" Cost to the company of one unit of the product
     Cost
     #(kp) concept = "kp:ProductUnitPrice"
+    #" List selling price of one unit of the product
     Price
 
     Color, Manufacturer, ProductCode, ProductName, SubCategoryName,
@@ -103,11 +123,14 @@ source: product is duckdb.table('ParquetFiles/product.parquet')
 
 // ---------- ORDER LINE ----------
 #(kp) concept = "kp:OrderLine"
+#" A single line on an order, recording one product, its quantity and the prices applied at sale time
+#(agent) Order Line (kp:OrderLine; sales domain, steward Sales). Preferred source for kp:OrderLine: base.order_line_in_context.
 source: order_line is duckdb.table('ParquetFiles/orderrows.parquet')
   include {
     public: OrderKey, ProductKey, RowNumber, UnitPrice
     
     #(kp) concept = "kp:LineQuantity"
+    #" Number of product units on the order line
     Quantity
 
     NetPrice, UnitCost
@@ -115,11 +138,14 @@ source: order_line is duckdb.table('ParquetFiles/orderrows.parquet')
 
 // ---------- ORDER ----------
 #(kp) concept = "kp:Order"
+#" A purchase transaction placed by a customer at a store on a given date, composed of one or more order lines
+#(agent) Order (kp:Order; sales domain, steward Sales). Preferred source for kp:Order: base.sales_order.
 source: order is duckdb.table('ParquetFiles/orders.parquet')
   include {
     public: OrderKey, StoreKey
     
     #(kp) concept = "kp:OrderDate"
+    #" The calendar date on which the order was placed
     DT
 
     DeliveryDate, CustomerKey, CurrencyCode
@@ -141,6 +167,8 @@ source: customer_order_in_context is customer extend {
 
   measure:
   #(kp) concept = "kp:ActiveCustomer"
+  #" A customer with at least one order in the last 2 years
+  #(agent) Membership: made_an_order count > 0 within last 2 years. Use this field; never hand-write the filter.
   is_active_customer is made_an_order.count() { where: made_an_order.DT ~ f'last 2 years' } > 0
 }
 
@@ -162,12 +190,16 @@ source: order_line_in_context(reporting_currency::string is "USD") is order_line
 
   dimension:
   #(kp) concept = "kp:LineRevenue"
+  #" Gross revenue for one order line: quantity times net price
   line_revenue is (Quantity * NetPrice) * converted_via.Exchange
   #(kp) concept = "kp:LineCost"
+  #" Cost of goods sold for one order line: quantity times unit cost
   line_cost   is (Quantity * UnitCost) * converted_via.Exchange
   #(kp) concept = "kp:LineListRevenue"
+  #" Revenue for one order line valued at list price (before discount): quantity times unit list price
   line_list_revenue is (Quantity * UnitPrice) * converted_via.Exchange
   #(kp) concept = "kp:LineDiscount"
+  #" Discount given on one order line: quantity times (list price minus net price)
   line_discount is ((UnitPrice - NetPrice) * Quantity) * converted_via.Exchange
 }
 
@@ -188,17 +220,23 @@ source: sales_order(reporting_currency::string is "USD") is order extend {
 
   dimension:
   #(kp) concept = "kp:SalesChannel"
+  #" The channel through which an order was placed: Online or Physical store
   channel is pick 'Online' when placed_at.CountryName = 'Online' else 'Physical store'
 
   measure:
   #(kp) concept = "kp:OrderCount"
+  #" Number of distinct orders in scope
   order_count is count()
   #(kp) concept = "kp:TotalSales"
+  #" Sum of line revenue across all order lines in scope
   total_sales is lines.line_revenue.sum()
   #(kp) concept = "kp:TotalCost"
+  #" Sum of line cost across all order lines in scope
   total_cost is lines.line_cost.sum()
   #(kp) concept = "kp:Margin"
+  #" Gross margin: total sales minus total cost
   margin is total_sales - total_cost
   #(kp) concept = "kp:MarginPercent"
+  #" Gross margin expressed as a ratio of total sales
   margin_percent is margin / total_sales
 }

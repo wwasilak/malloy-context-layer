@@ -1365,3 +1365,94 @@ test('okf_slug.py mints byte-identical slugs to okf-slug.js (cross-language, OKF
   assert.deepStrictEqual(pyOut, inputs.map(slugify), 'Python and JS slugify disagree');
   assert.deepStrictEqual(pyOut, SLUG_GOLDEN.map(([, e]) => e), 'Python slugify drifted from the golden');
 });
+
+// ---- INT-1: kp-stamp.js (say each thing once; ownership by position) --------
+{
+  const { stampText, sourceGraph, targetsFrom, OWNED } = require('../kp-stamp');
+  const canon = {
+    'kp:Order': { kind: 'entity', label: 'Order', definition: 'A sales order.', governed: true, _domain: 'sales', steward: 'Sales', preferred_source: 'base.sales_order' },
+    'kp:TotalSales': { kind: 'measure', label: 'Total Sales', definition: 'Sum of\n line revenue.', governed: true, _domain: 'global' },
+    'kp:Draft': { kind: 'measure', label: 'Draft', definition: 'x', governed: false, status: 'draft', _domain: 'sales' },
+    'kp:Active': { kind: 'defined_class', label: 'Active', definition: 'Active one.', governed: true, _domain: 'sales', membership_rule: 'n > 0' },
+  };
+  const base = [
+    '##! experimental.parameters',
+    '#(kp) concept = "kp:Order"',
+    'source: order is duckdb.table(\'o.parquet\') extend {',
+    '  measure:',
+    '  #(kp) concept = "kp:TotalSales"',
+    '  total_sales is x.sum()',
+    '  #(kp) concept = "kp:Draft"',
+    '  d is y.sum()',
+    '  #(kp) concept = "kp:Active"',
+    '  a is z.count()',
+    '  // hand-written, not owned:',
+    '  #" free text on an unlinked field',
+    '  u is w.sum()',
+    '}',
+    '#(kp) concept = "kp:Order"',
+    'source: sales_order(c::string is "USD") is',
+    '  order extend { }',
+  ].join('\n');
+  const opts = () => ({ canon, graph: sourceGraph([base]) });
+
+  test('stampText: idempotent', () => {
+    const once = stampText(base, opts());
+    assert.notStrictEqual(once, base);
+    assert.strictEqual(stampText(once, opts()), once);
+  });
+
+  test('stampText: a governed measure gets exactly one #" and no #(agent)', () => {
+    const out = stampText(base, opts()).split('\n');
+    const i = out.indexOf('  total_sales is x.sum()');
+    assert.deepStrictEqual(out.slice(i - 2, i), ['  #(kp) concept = "kp:TotalSales"', '  #" Sum of line revenue']);
+  });
+
+  test('stampText: #(agent) only when field-specific (draft, membership)', () => {
+    const out = stampText(base, opts());
+    assert.match(out, /  #\(agent\) Draft \(kp:Draft, status draft\)/);
+    assert.match(out, /  #\(agent\) Membership: n > 0\./);
+    assert.strictEqual((out.match(/#\(agent\)/g) || []).length, 3);   // draft + membership + one root source
+  });
+
+  test('stampText: only the ROOT source is stamped; a same-concept child inherits', () => {
+    const out = stampText(base, opts()).split('\n');
+    const child = out.indexOf('source: sales_order(c::string is "USD") is');
+    assert.strictEqual(out[child - 1], '#(kp) concept = "kp:Order"');
+    assert.ok(out.includes('#(agent) Order (kp:Order; sales domain, steward Sales). Preferred source for kp:Order: base.sales_order.'));
+  });
+
+  test('stampText: hand-written #" on an unlinked field survives; hand edits on linked ones do not', () => {
+    const once = stampText(base, opts());
+    assert.ok(once.includes('  #" free text on an unlinked field'));
+    const tampered = once.replace('  #" Sum of line revenue', '  #" Sum of revenue, roughly').replace('#(kp) concept = "kp:TotalSales"', '#(kp) concept = "kp:TotalSales"\n  #(agent) hand note');
+    assert.strictEqual(stampText(tampered, opts()), once);
+  });
+
+  test('stampText: model layer only in index.malloy, after ##!, with max_date', () => {
+    assert.ok(!/^##\(agent\)/m.test(stampText(base, opts())));
+    const out = stampText(base, { ...opts(), isIndex: true, maxDate: '2024-04-20' }).split('\n');
+    assert.strictEqual(out[0], '##! experimental.parameters');
+    assert.match(out[1], /^##\(agent\) .*\(2024-04-20\), not today\.$/);
+    assert.strictEqual(stampText(out.join('\n'), { ...opts(), isIndex: true, maxDate: '2024-04-20' }), out.join('\n'));
+  });
+
+  test('stampText: an unlinked MEASURE gets one Not-governed note; its hand-written #" survives', () => {
+    const at = base.split('\n').indexOf('  u is w.sum()');
+    const o = { ...opts(), unlinkedMeasureLines: [at] };
+    const once = stampText(base, o);
+    assert.ok(once.includes('  #" free text on an unlinked field\n  #(agent) Not governed: exploratory only.\n  u is w.sum()'));
+    // restamping recomputes the line from the compile, which now sees the note above it
+    const again = stampText(once, { ...opts(), unlinkedMeasureLines: [once.split('\n').indexOf('  u is w.sum()')] });
+    assert.strictEqual(again, once);
+    assert.ok(!stampText(base, opts()).includes('Not governed'));   // no compile info -> no guess
+  });
+
+  test('stampText: #(doc) only behind STAMP_TARGETS; CRLF preserved', () => {
+    assert.ok(!stampText(base, opts()).includes('#(doc)'));
+    assert.match(stampText(base, { ...opts(), targets: targetsFrom('malloyyo,publisher') }), /  #\(doc\) Sum of line revenue/);
+    assert.throws(() => targetsFrom('tableau'), /unknown target/);
+    assert.ok(!/[^\r]\n/.test(stampText(base.replace(/\n/g, '\r\n'), opts())));
+    assert.ok(OWNED.test('  #" x') && OWNED.test('#(agent) y') && !OWNED.test('#(kp) concept = "kp:X"'));
+  });
+}
