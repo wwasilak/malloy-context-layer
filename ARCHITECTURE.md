@@ -121,7 +121,7 @@ and `kp/` are what gets tested, not a stub.
    `report.js` only prints them. The eval history is queryable with the tool
    under test.
 
-Data: the committed `ParquetFiles/` are the fixture set — hermetic and
+Data: the committed `data/` are the fixture set — hermetic and
 byte-identical in CI. `--live` switches WORKDIR for scheduled drift runs.
 
 CI (`.github/workflows/eval.yml`, separate from the build gate): the

@@ -222,7 +222,7 @@ process.on('uncaughtException', (e) => { restoreNow(); console.error('FATAL:', e
   try {
     if (mode === 'fixtures') {
       const { treeDigest } = require('./lib/identity');
-      dataSource = `fixtures@${treeDigest('ParquetFiles').slice(0, 12)}`;
+      dataSource = `fixtures@${treeDigest('data', { exclude: ['LICENSE'] }).slice(0, 12)}`;
     } else {
       dataSource = `live@${workdir}`;
     }

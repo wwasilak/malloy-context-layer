@@ -54,7 +54,7 @@ definitions rather than improvised SQL.
 
 ## Getting started
 
-From the repo root (DuckDB resolves `ParquetFiles/...` relative to it):
+From the repo root (DuckDB resolves `data/...` relative to it):
 
 ```
 npm install

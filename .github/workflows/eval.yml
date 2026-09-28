@@ -17,7 +17,7 @@ name: eval
 # same check in this job: it costs seconds and stops a broken case from
 # spending a whole sweep before the build workflow has gone red.
 #
-# Data: the parquet files under ParquetFiles/ are committed, so CI gets
+# Data: the parquet files under data/ are committed, so CI gets
 # byte-identical fixtures on every run and gold values are stable (EVAL-4).
 # Live-data drift runs are scheduled separately and never run on a PR.
 

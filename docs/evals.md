@@ -358,7 +358,7 @@ of a *selected* run is closer to $0.16 than $0.03.
 
 Numeric gold values rot when data moves. Two defences, both in use:
 
-1. **Fixtures freeze the numbers.** The parquet files under `ParquetFiles/` are
+1. **Fixtures freeze the numbers.** The parquet files under `data/` are
    committed to git, so CI checks out byte-identical data on every run. They
    already are the hermetic fixture set — there is deliberately no second
    sampled copy to keep in sync, and no "fixture vs live" gold discrepancy.
@@ -526,7 +526,7 @@ to prevent:
 
 `kp/agent/examples.md` and `kp/agent/corrections.md` stay **in**. Those are
 standing hints the agent reads and acts on: editing them can move a number,
-which is what "the meaning changed" means. Binary fixtures (`ParquetFiles/`)
+which is what "the meaning changed" means. Binary fixtures (`data/`)
 are always hashed byte-for-byte — no text normalisation is applied to them.
 
 ## Gold values

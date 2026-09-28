@@ -19,7 +19,7 @@ given:
 #(kp) concept = "kp:CurrencyExchangeRate"
 #" The daily rate for converting an amount from one currency into a reporting currency
 #(agent) Currency Exchange Rate (kp:CurrencyExchangeRate; finance domain, steward Finance).
-source: currency_exchange_rate is duckdb.table('ParquetFiles/currencyexchange.parquet')
+source: currency_exchange_rate is duckdb.table('data/currencyexchange.parquet')
   include {
     public: FromCurrency, ToCurrency, `Date`
      Exchange
@@ -29,7 +29,7 @@ source: currency_exchange_rate is duckdb.table('ParquetFiles/currencyexchange.pa
 #(kp) concept = "kp:Customer"
 #" A natural or legal person who buys products from the company
 #(agent) Customer (kp:Customer; sales domain, steward Sales). Preferred source for kp:Customer: base.customer_order_in_context.
-source: customer is duckdb.table('ParquetFiles/customer.parquet')
+source: customer is duckdb.table('data/customer.parquet')
   include {
     public:  GeoAreaKey
     
@@ -61,7 +61,7 @@ source: customer is duckdb.table('ParquetFiles/customer.parquet')
 #(kp) concept = "kp:CalendarDate"
 #" A single calendar day, used as the temporal anchor for transactions and reporting periods
 #(agent) Calendar Date (kp:CalendarDate; finance domain, steward Finance).
-source: calendar_date is duckdb.table('ParquetFiles/date.parquet')
+source: calendar_date is duckdb.table('data/date.parquet')
   include {
     public: DateKey
 
@@ -77,7 +77,7 @@ source: calendar_date is duckdb.table('ParquetFiles/date.parquet')
 #(kp) concept = "kp:Store"
 #" A physical or online point of sale where orders are placed
 #(agent) Store (kp:Store; operations domain, steward Retail Operations).
-source: store is duckdb.table('ParquetFiles/store.parquet')
+source: store is duckdb.table('data/store.parquet')
   include {
     public: 
     StoreKey, GeoAreaKey
@@ -97,7 +97,7 @@ source: store is duckdb.table('ParquetFiles/store.parquet')
 #(kp) concept = "kp:Product"
 #" A sellable item offered to customers, identified by a stable product key
 #(agent) Product (kp:Product; merchandising domain, steward Merchandising).
-source: product is duckdb.table('ParquetFiles/product.parquet')
+source: product is duckdb.table('data/product.parquet')
   include {
      public: ProductKey, CategoryKey, SubCategoryKey
     
@@ -125,7 +125,7 @@ source: product is duckdb.table('ParquetFiles/product.parquet')
 #(kp) concept = "kp:OrderLine"
 #" A single line on an order, recording one product, its quantity and the prices applied at sale time
 #(agent) Order Line (kp:OrderLine; sales domain, steward Sales). Preferred source for kp:OrderLine: base.order_line_in_context.
-source: order_line is duckdb.table('ParquetFiles/orderrows.parquet')
+source: order_line is duckdb.table('data/orderrows.parquet')
   include {
     public: OrderKey, ProductKey, RowNumber, UnitPrice
     
@@ -140,7 +140,7 @@ source: order_line is duckdb.table('ParquetFiles/orderrows.parquet')
 #(kp) concept = "kp:Order"
 #" A purchase transaction placed by a customer at a store on a given date, composed of one or more order lines
 #(agent) Order (kp:Order; sales domain, steward Sales). Preferred source for kp:Order: base.sales_order.
-source: order is duckdb.table('ParquetFiles/orders.parquet')
+source: order is duckdb.table('data/orders.parquet')
   include {
     public: OrderKey, StoreKey
     
