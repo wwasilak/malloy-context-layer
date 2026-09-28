@@ -27,3 +27,5 @@ publisher_data/
 publisher.db
 publisher.db.wal
 *.db.wal
+
+scratch/

@@ -74,8 +74,9 @@ becoming the bottleneck). SIMP-2, 3, 4 and 5 have all shipped.
    `kp_viz.html` no longer churns to CRLF on build. See Phase 2d's "Review
    follow-ups". Branch not yet merged.
 
-**Then:** pick a server — INT-1/INT-2 first (both runtime-independent), then
-INT-3a or INT-3b with INT-6.
+**Then:** Phase 3 on the Malloyyo track (decided 2026-09-28) — INT-7 → INT-1 →
+`malloyyo test` → INT-3b with INT-6 → INT-2; INT-4 only if the `#(agent)` layer
+proves insufficient.
 
 **Continuously (the standing pipeline — outlives EVAL-5's closure):** every
 correction filed gets an eval case in the same PR. This is what re-opens
@@ -267,17 +268,34 @@ code comments; the index here is the roll-call, the detail is in LEARNINGS.
 
 ## Phase 3 — Server adoption
 
-*Publisher or Malloyyo; pick one.*
+*Decided 2026-09-28: **Malloyyo** is the target runtime (logins/OAuth for a
+non-technical user in claude.ai, query log, dashboards stay Malloy). Publisher
+stays usable for local dev — the stamper emits for both, so the models remain
+runtime-neutral.*
+
+**Annotation routes (verified 2026-09-28).** Malloy reserves punctuation routes
+and leaves bracketed routes to apps. `#"` is Malloy's own description route
+(markdown) — Malloyyo promotes it to `description`. `#(agent)` is Malloyyo's
+agent route — promoted to `instructions`, at model, source and field level;
+model/source-level notes ride `list_sources` (the first call every client
+makes), field-level ones ride `describe_source`. `#(doc)` is Publisher's app
+route, read by `get_context`. Malloyyo declined a file-based guidance channel
+(malloyyo#91) as redundant with `#(agent)`, so annotations *are* the delivery
+path for the KP. Our `# concept` sits on the empty route, which belongs to the
+renderer → move it to our own route (INT-7).
 
 | Code | Item | Effort | Detail |
 |---|---|---|---|
-| INT-1 | `#(doc)` stamper in build.js | 0.5 day | For every `# concept`-annotated field, insert/refresh a `#(doc)` line from the KP definition (+ units, membership rules). Idempotent, regenerated per build. Governed definitions become the server's own discovery surface (getContext / describe_source). Runtime-independent — pays off regardless of pick. |
-| INT-2 | CLAUDE.md → skill | 0.5 day | Reshape as `kp-analysis/SKILL.md` (also completes GOV-1). On Publisher it composes with their skills (theirs: query craft; ours: routing/governance); standalone elsewhere. |
-| INT-3a | Publisher wiring | 1-2 days | `publisher.json`; flat layout; map `allowed_roles` → `internal:`/`private:`/required filters (or GOV-3 givens) + build check (declared vs enforced). |
-| INT-3b | Malloyyo wiring | 1-2 days | `index.malloy`; `node build.js` as pre-push gate; define views for canonical questions (restricted-mode surface enforces "no invented joins" structurally). |
-| INT-6 | Currency param → given | 0.5 day | Migrate `order_line_in_context(reporting_currency::string)` to `given: REPORTING_CURRENCY :: string is "USD"` — session-scoped by nature ("one value everywhere", per the givens doc's own criterion), removes instantiation syntax from the agent's world, aligns with Malloyyo's direction, valid on any runtime. Rule: every analysis-facing given carries a default (satisfiability). Do together with INT-3, whichever track. |
-| INT-4 | claude.ai degraded mode | 0.5 day | Project knowledge = `kp/index.md` + skill (routing works); logs read-only there, or add GitHub MCP so log appends become commits. |
-| INT-5 | Two-sided receipts | doc only | Server query logs (Malloy that ran) + question-log (question, concepts, method) = full provenance. Document the pairing; no new code. |
+| INT-7 | `# concept` → `#(kp)` route | 0.5 day | Migrate `# concept = "kp:X"` (and `# is_about_role`) to `#(kp) concept="kp:X"`, off the renderer's empty route. `build.js`/`malloy-lib` read the `kp` route. One-time migration of `models/`; CLAUDE.md + BOOT-2 templates updated. Do first — INT-1 keys on it. |
+| INT-1 | KP stamper, in place — **DONE `383707e`** (acceptance run pending) | 1 day | `build.js` (via `kp-stamp.js`) stamps the KP **into `models/*.malloy` in place**. **Say each thing once, at the highest level where it is true.** **Model** `##(agent)` — ~3 sentences of global rules + `max_date`; **only in `index.malloy`** (verified: `##` does not survive `import`, and `index.malloy` is what Malloyyo publishes — until INT-3b adds it, the build warns). **Source** `#"` definition + `#(agent)` domain/steward/preferred source — **root sources only** (verified: `extend` inherits source annotations, so a same-concept child already carries them; 7 of 15 sources, 69 words). **Field** `#"` = the KP definition, verbatim; `#(agent)` only when field-specific (draft, membership rule, roles), and `Not governed: exploratory only` on every **measure** with no `#(kp)` link (found from the compiled model) — so a silent measure means governed, which is what the model rule says. **No `[kp]` marker — ownership by position:** every `#"`/`#(agent)` on a `#(kp)`-linked item (and the model layer of `index.malloy`) is generated; hand-written ones are allowed only elsewhere. **`#(doc)` (Publisher) behind a flag:** `STAMP_TARGETS=malloyyo,publisher`; default Malloyyo only. **Drift gate:** `npm run build:check` (read-only; fails on a stale or hand-edited stamp) runs as the git pre-commit hook (CI catches the same drift via `build` + its clean-tree check) (`.githooks/`, enabled by `npm install`). A KP definition change therefore shows up in the `.malloy` diff of the same PR. Result: 71 stamp lines (the `[kp]`-marked first draft had 226); a governed measure carries one `#"` line. **Limit:** without a marker, a hand edit and a stale stamp look the same — `build` overwrites both, `build:check` fails on both. **Acceptance still open:** `malloyyo test` (sees only the model, no `kp/`) — the CLI was not available; verified instead via Malloy's Annotations API on a scratch `index.malloy` (governed / draft / unlinked measure each read back as intended). Open check: whether Publisher also reads `#"`; if yes, drop the `#(doc)` emitter. Considered and rejected: a generated `dist/models/` copy — two copies, extra build step before serving, no direct GitHub-webhook publish from `main`. |
+| INT-3b | Malloyyo wiring | 1-2 days | `index.malloy` in `models/`; publish straight from `main` (`malloyyo publish` or GitHub webhook) — stamps are committed, so what's in git is what's served; `node build.js` as the pre-publish / CI gate; define views for canonical questions (restricted-mode surface enforces "no invented joins" structurally). Dashboards in `models/dashboards/**` (CLAUDE.md exception: import-only, no new measures). |
+| INT-6 | Currency param → given | 0.5 day | Migrate `order_line_in_context(reporting_currency::string)` to `given: REPORTING_CURRENCY :: string is "USD"` — session-scoped by nature ("one value everywhere", per the givens doc's own criterion), removes instantiation syntax from the agent's world, aligns with Malloyyo's direction, valid on any runtime. Rule: every analysis-facing given carries a default (satisfiability). Do together with INT-3b. |
+| INT-2 | CLAUDE.md → skill | 0.5 day | Reshape as `kp-analysis/SKILL.md` (also completes GOV-1). Now scoped to Claude Code / full-KP sessions; the condensed rules for MCP-only clients come from INT-1's `##(agent)`, generated from the same source so the two cannot drift. |
+| INT-4 | claude.ai full-routing mode | 0.5 day | **Fallback only**, if INT-1's `#(agent)` layer proves insufficient in `malloyyo test`: Project knowledge = `kp/index.md` + INT-2 skill; logs read-only there, or add GitHub MCP so log appends become commits. |
+| INT-5 | Two-sided receipts | doc only | Server query logs (Malloy that ran — Malloyyo's query log) + question-log (question, concepts, method) = full provenance. Document the pairing; no new code. |
+| INT-3a | Publisher wiring | 1-2 days | **Optional** (local dev / HTML data apps only). `publisher.json`; `location: ./models` (unchanged); map `allowed_roles` → `internal:`/`private:`/required filters (or GOV-3 givens) + build check (declared vs enforced). |
+
+**Order:** INT-7 → INT-1 → `malloyyo test` → INT-3b + INT-6 → INT-2 → (INT-4 only if needed).
 
 ---
 

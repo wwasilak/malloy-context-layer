@@ -68,6 +68,14 @@ graphs). It **fails hard** on any validation error. CI runs the same command on
 every PR and additionally fails if the write-back left the tree dirty — see
 [`.github/workflows/build.yml`](.github/workflows/build.yml).
 
+The build also **stamps the KP into the models** (INT-1): each `#(kp)`-linked
+field and source gets a `#"` description and, where needed, an `#(agent)`
+instruction — the annotations Malloyyo serves to agents. Those lines are
+generated; change the KP, not the stamp. `npm run build:check` runs every
+validation read-only and fails if a stamp is stale or hand-edited. `npm install`
+enables it as a git pre-commit hook (`core.hooksPath=.githooks`); bypass in an
+emergency with `git commit --no-verify`.
+
 To run the eval loop (needs the `claude` CLI on PATH and the Malloy MCP server):
 
 ```
