@@ -6,15 +6,11 @@ name: build
 #      query-text handling. No database, ~1s. It is here rather than in the eval
 #      workflow because it gates the code the eval loop is BUILT from.
 #   1. validate the Knowledge Plane bundle + compile every Malloy model,
-#   2. fail on any validation error (build.js exits non-zero),
-#   3. fail if the write-back left the working tree dirty — i.e. someone edited
-#      a concept but did not commit the regenerated routing table /
-#      Implementations tables. This forces committed write-back.
-#
-# Note: the graph refresh (make_viz.py) is intentionally NOT wired here. It
-# needs the GoogleCloudPlatform/knowledge-catalog clone, which is gitignored and
-# absent in CI, so build.js skips it best-effort and it never dirties the tree.
-# Graphs are regenerated locally and committed by the author.
+#   2. fail on any validation error (scripts/build.js exits non-zero),
+#   3. fail if the build left the working tree dirty — i.e. someone edited a
+#      concept but did not commit the regenerated routing table /
+#      Implementations tables, or the KP stamps in models/ (INT-1) are stale or
+#      hand-edited. This forces committed write-back and committed stamps.
 
 on:
   pull_request:

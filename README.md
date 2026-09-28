@@ -31,7 +31,7 @@ Two artifacts in git, one build command, links between them:
   department models `import "base.malloy"` and extend it. Fields link to a
   concept with a `#(kp) concept = "kp:..."` annotation, so meaning lives in one place.
 
-3. **`build.js` — the link.** It validates the bundle, compiles every model,
+3. **`scripts/build.js` — the link.** It validates the bundle, compiles every model,
   checks every annotation resolves to a real concept (and every
   `preferred_source` to a real source), then **writes the mapping back** into the
   bundle: each concept's `## Implementations` table and the root
@@ -62,9 +62,7 @@ npm run build
 ```
 
 `npm run build` validates `kp/**` against `models/*.malloy` and regenerates the
-write-back (routing table, Implementations tables, indexes, and — if a
-`knowledge-catalog` clone and Python/pyyaml are present — the `kp_viz*.html`
-graphs). It **fails hard** on any validation error. CI runs the same command on
+write-back (routing table, Implementations tables, indexes). It **fails hard** on any validation error. CI runs the same command on
 every PR and additionally fails if the write-back left the tree dirty — see
 [`.github/workflows/build.yml`](.github/workflows/build.yml).
 

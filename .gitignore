@@ -2,7 +2,6 @@ node_modules/
 *.log
 .DS_Store
 .vscode/
-knowledge-catalog/
 __pycache__/
 
 # Machine-specific local Malloy MCP config (hardcoded absolute paths) — each

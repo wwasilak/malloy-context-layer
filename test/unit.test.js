@@ -23,7 +23,7 @@ const {
   compareResults, containsAll, candidateRowSets, bestMatch,
   stripImports, referencedSource, resolveModelFor,
 } = require('../evals/lib/malloy');
-const { definedIn, listModelFiles } = require('../malloy-lib');
+const { definedIn, listModelFiles } = require('../scripts/malloy-lib');
 const {
   parseJsonBlock, toRun, buildPrompt, buildRepairPrompt, addUsage, sumTokens, askTier1,
 } = require('../evals/lib/tier1');
@@ -38,8 +38,8 @@ const {
   conceptDeps,
 } = require('../evals/lib/select');
 const { runPool, serialize } = require('../evals/lib/pool');
-const { verifiedList, trustTierOf, governedOf } = require('../okf-lib');
-const { slugify, actorFor } = require('../okf-slug');
+const { verifiedList, trustTierOf, governedOf } = require('../scripts/okf-lib');
+const { slugify, actorFor } = require('../scripts/okf-slug');
 
 // ---- porcelainPaths (EVAL-8 regression) -------------------------------------
 // `git status --porcelain` emits `XY PATH`. X or Y is very often a space, so
@@ -1352,7 +1352,7 @@ test('okf_slug.py mints byte-identical slugs to okf-slug.js (cross-language, OKF
   const { execSync, execFileSync } = require('node:child_process');
   // `python3` is a Store stub on Windows; probe for one that can import the module.
   const py = ['python3', 'python', 'py -3'].find((p) => {
-    try { execSync(`${p} -c "import okf_slug"`, { stdio: 'pipe' }); return true; } catch { return false; }
+    try { execSync(`${p} -c "import okf_slug"`, { stdio: 'pipe', cwd: 'scripts' }); return true; } catch { return false; }
   });
   if (!py) { t.skip('no python on PATH able to import okf_slug'); return; }
 
@@ -1360,7 +1360,7 @@ test('okf_slug.py mints byte-identical slugs to okf-slug.js (cross-language, OKF
   const [cmd, ...pre] = py.split(' ');
   const script = 'import sys,json; from okf_slug import slugify; '
     + 'print(json.dumps([slugify(x) for x in json.loads(sys.argv[1])]))';
-  const pyOut = JSON.parse(execFileSync(cmd, [...pre, '-c', script, JSON.stringify(inputs)], { encoding: 'utf8' }));
+  const pyOut = JSON.parse(execFileSync(cmd, [...pre, '-c', script, JSON.stringify(inputs)], { encoding: 'utf8', cwd: 'scripts' }));
 
   assert.deepStrictEqual(pyOut, inputs.map(slugify), 'Python and JS slugify disagree');
   assert.deepStrictEqual(pyOut, SLUG_GOLDEN.map(([, e]) => e), 'Python slugify drifted from the golden');
@@ -1368,7 +1368,7 @@ test('okf_slug.py mints byte-identical slugs to okf-slug.js (cross-language, OKF
 
 // ---- INT-1: kp-stamp.js (say each thing once; ownership by position) --------
 {
-  const { stampText, sourceGraph, targetsFrom, OWNED } = require('../kp-stamp');
+  const { stampText, sourceGraph, targetsFrom, OWNED } = require('../scripts/kp-stamp');
   const canon = {
     'kp:Order': { kind: 'entity', label: 'Order', definition: 'A sales order.', governed: true, _domain: 'sales', steward: 'Sales', preferred_source: 'base.sales_order' },
     'kp:TotalSales': { kind: 'measure', label: 'Total Sales', definition: 'Sum of\n line revenue.', governed: true, _domain: 'global' },

@@ -16,7 +16,7 @@
 //   supplied by the environment for scheduled drift runs.
 // =============================================================================
 const fs = require('fs');
-const mal = require('../../malloy-lib');
+const mal = require('../../scripts/malloy-lib');
 
 const MODELS_DIR = mal.MODELS_DIR;
 const REPO_ROOT = process.cwd();

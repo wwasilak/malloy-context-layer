@@ -19,13 +19,13 @@ const path = require('path');
 const okf = require('./okf-lib');
 const mal = require('./malloy-lib');
 const { stampText, sourceGraph, targetsFrom: stampTargets } = require('./kp-stamp');
-const { checkGold } = require('./evals/lib/goldcheck');
-const evalMal = require('./evals/lib/malloy');
+const { checkGold } = require('../evals/lib/goldcheck');
+const evalMal = require('../evals/lib/malloy');
 
 const KP_DIR     = process.env.KP_DIR     || 'kp';
 const MODELS_DIR = mal.MODELS_DIR;
 const WORKDIR    = process.env.WORKDIR    || process.cwd();
-// --check: validate only, write nothing (KP stamps, write-back, viz). This is
+// --check: validate only, write nothing (KP stamps, write-back). This is
 // the pre-commit hook (.githooks/pre-commit) — it must never dirty the tree.
 const CHECK      = process.argv.includes('--check');
 
@@ -322,27 +322,6 @@ async function compileModel(filePath) {
       if (s.concept) sourceConcepts[`${m.model}.${srcName}`] = s.concept;
   const touched = okf.writeBack(KP_DIR, bundle, implementations, sourceConcepts,
                                 { views: viewInventory, coverage });
-
-  // 7. refresh the graphs (best effort — needs knowledge-catalog cloned + pyyaml)
-  //    `python3` is not a real interpreter on Windows (Store stub), so probe for
-  //    one that can actually import yaml rather than assuming a name.
-  const { execSync } = require('child_process');
-  const python = ['python3', 'python', 'py -3'].find(p => {
-    try { execSync(`${p} -c "import yaml"`, { stdio: 'pipe' }); return true; } catch { return false; }
-  });
-  if (!python)
-    console.log('(viz skipped — no python on PATH with pyyaml; run: pip install pyyaml)');
-  else
-    for (const [out, flag] of [['kp_viz.html', ''], ['kp_viz_conceptual.html', '--conceptual']]) {
-      try {
-        execSync(`${python} make_viz.py ${KP_DIR} ${out} ${flag}`, { stdio: 'pipe' });
-        console.log(`Graph refreshed -> ${out}`);
-      } catch (e) {
-        // surface the real cause instead of always blaming the missing clone
-        const why = String(e.stderr || e.message).trim().split('\n').pop();
-        console.log(`(viz skipped for ${out} — ${why})`);
-      }
-    }
 
   const shared = Object.keys(touch).filter(u => touch[u].size > 1);
   console.log('\nConcepts used: ' + Object.keys(touch).length + ' / ' + Object.keys(canon).length + ' canonical');

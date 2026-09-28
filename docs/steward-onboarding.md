@@ -103,7 +103,7 @@ governance gap) is a warning; worth acting on but doesn't block the build.
 
 ## Not comfortable in markdown?
 
-There's an Excel round-trip (`okf_to_excel.py` / `excel_to_okf.py`). If a
+There's an Excel round-trip (`scripts/okf_to_excel.py` / `scripts/excel_to_okf.py`). If a
 workbook cycle is in flight, **Excel owns the frontmatter fields it carries** —
 don't hand-edit those same files in parallel or the two paths fight. See
 [ARCHITECTURE.md](../ARCHITECTURE.md) → "Authoring surfaces".
