@@ -184,7 +184,7 @@ source: order_line_in_context(reporting_currency::string is "USD") is order_line
 
   #(kp) is_about_role = "kp:isConvertedVia"
   join_one: converted_via is currency_exchange_rate on
-        of_order.CurrencyCode = converted_via.FromCurrency
+         converted_via.FromCurrency = 'USD'
     and of_order.DT           = converted_via.`Date`
     and converted_via.ToCurrency = reporting_currency
 
